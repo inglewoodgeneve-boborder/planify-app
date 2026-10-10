@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { checkShift, shiftDuration, isHoliday, isSunday } from '../lib/lgav'
 
 const FR_DAYS   = ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim']
@@ -6,6 +6,7 @@ const FR_MONTHS = ['jan','fév','mar','avr','mai','jun','jul','aoû','sep','oct'
 
 export default function Planning({ site, employees, shiftDefs, shifts, templates, weekOffset, setWeekOffset, onDropShift, onDeleteShift, onSaveTemplate, weekDates, fmtDate }) {
   const [dragSource, setDragSource]   = useState(null)
+  const dragRef = useRef(null)
   const [dropTarget, setDropTarget]   = useState(null)
   const [modal, setModal]             = useState(null)   // { empId, date }
   const [modalLabel, setModalLabel]   = useState('')
@@ -46,22 +47,25 @@ export default function Planning({ site, employees, shiftDefs, shifts, templates
 
   // ── Drag & Drop ────────────────────────────────────────────
   function onPaletteDragStart(e, def) {
-    setDragSource({ type: 'palette', def })
+    const src = { type: 'palette', def }
+    setDragSource(src); dragRef.current = src
     e.dataTransfer.setData('text/plain', def.id)
   }
   function onImportedDragStart(e, slot) {
     const def = shiftDefs.find(d => d.id === slot.shift_def_id)
     if (!def) return
-    setDragSource({ type: 'imported', def, slot })
+    const src = { type: 'imported', def, slot }
+    setDragSource(src); dragRef.current = src
     e.dataTransfer.setData('text/plain', def.id)
   }
   function onAssignedDragStart(e, shift) {
-    setDragSource({ type: 'assigned', shift })
+    const src = { type: 'assigned', shift }
+    setDragSource(src); dragRef.current = src
     e.dataTransfer.setData('text/plain', shift.id)
   }
   function onCellDragOver(e, empId, dateStr) {
     e.preventDefault()
-    e.dataTransfer.dropEffect = dragSource?.type === 'assigned' ? 'move' : 'copy'
+    e.dataTransfer.dropEffect = dragRef.current?.type === 'assigned' ? 'move' : 'copy'
     setDropTarget(`${empId}_${dateStr}`)
   }
   function onCellDragLeave() { setDropTarget(null) }
@@ -69,20 +73,22 @@ export default function Planning({ site, employees, shiftDefs, shifts, templates
   async function onCellDrop(e, empId, dateStr) {
     e.preventDefault()
     setDropTarget(null)
-    if (!dragSource) return
+    const src = dragRef.current
+    if (!src) return
 
-    if (dragSource.type === 'palette' || dragSource.type === 'imported') {
-      const def = dragSource.def
+    if (src.type === 'palette' || src.type === 'imported') {
+      const def = src.def
       await onDropShift({ employeeId: empId, workDate: dateStr, shiftDefId: def.id, startTime: def.start_time, endTime: def.end_time })
-      if (dragSource.type === 'imported' && importedPalette) {
-        setImportedPalette(prev => ({ ...prev, slots: prev.slots.filter(s => s.slotKey !== dragSource.slot.slotKey) }))
+      if (src.type === 'imported' && importedPalette) {
+        setImportedPalette(prev => ({ ...prev, slots: prev.slots.filter(s => s.slotKey !== src.slot.slotKey) }))
       }
-    } else if (dragSource.type === 'assigned') {
-      const s = dragSource.shift
+    } else if (src.type === 'assigned') {
+      const s = src.shift
       if (s.employee_id === empId && s.work_date === dateStr) return
       await onDeleteShift(s.id)
       await onDropShift({ employeeId: empId, workDate: dateStr, shiftDefId: s.shift_def_id, startTime: s.start_time, endTime: s.end_time })
     }
+    dragRef.current = null
     setDragSource(null)
   }
 
