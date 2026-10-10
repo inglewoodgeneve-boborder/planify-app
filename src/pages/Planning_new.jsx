@@ -5,12 +5,20 @@ const FR_DAYS   = ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim']
 const FR_MONTHS = ['jan','fév','mar','avr','mai','jun','jul','aoû','sep','oct','nov','déc']
 
 export default function Planning({ site, employees, shiftDefs, shifts, templates, weekOffset, setWeekOffset, onDropShift, onDeleteShift, onSaveTemplate, weekDates, fmtDate }) {
-  const [dragSource, setDragSource]   = useState(null) // { type:'palette'|'assigned', ... }
-  const [dropTarget, setDropTarget]   = useState(null) // `${empId}_${date}`
-  const [modal, setModal]             = useState(null) // { empId, date }
+  const [dragSource, setDragSource]   = useState(null)
+  const [dropTarget, setDropTarget]   = useState(null)
+  const [modal, setModal]             = useState(null)
   const [modalDef, setModalDef]       = useState('')
   const [modalStart, setModalStart]   = useState('08:00')
   const [modalEnd, setModalEnd]       = useState('16:00')
+
+  // Template builder
+  const [tplModal, setTplModal]       = useState(false)  // création template
+  const [tplName, setTplName]         = useState('')
+  const [tplSlots, setTplSlots]       = useState([])     // [{ day_index, shift_def_id }]
+
+  // Palette import depuis template
+  const [importedPalette, setImportedPalette] = useState(null) // null | { tplId, slots: [{ day_index, shift_def_id, id }] }
 
   const dates  = weekDates(weekOffset)
   const today  = fmtDate(new Date())
@@ -41,6 +49,12 @@ export default function Planning({ site, employees, shiftDefs, shifts, templates
   function onPaletteDragStart(def) {
     setDragSource({ type: 'palette', def })
   }
+  function onImportedDragStart(slot) {
+    // slot = { day_index, shift_def_id, slotKey }
+    const def = shiftDefs.find(d => d.id === slot.shift_def_id)
+    if (!def) return
+    setDragSource({ type: 'imported', def, slot })
+  }
   function onAssignedDragStart(shift) {
     setDragSource({ type: 'assigned', shift })
   }
@@ -57,7 +71,7 @@ export default function Planning({ site, employees, shiftDefs, shifts, templates
     setDropTarget(null)
     if (!dragSource) return
 
-    if (dragSource.type === 'palette') {
+    if (dragSource.type === 'palette' || dragSource.type === 'imported') {
       const def = dragSource.def
       await onDropShift({
         employeeId:  empId,
@@ -66,12 +80,18 @@ export default function Planning({ site, employees, shiftDefs, shifts, templates
         startTime:   def.start_time,
         endTime:     def.end_time,
       })
+      // Si glissé depuis palette importée, retirer ce slot
+      if (dragSource.type === 'imported' && importedPalette) {
+        setImportedPalette(prev => ({
+          ...prev,
+          slots: prev.slots.filter(s => s.slotKey !== dragSource.slot.slotKey)
+        }))
+      }
     } else if (dragSource.type === 'assigned') {
       const s = dragSource.shift
-      const key = `${s.employee_id}_${s.work_date}`
+      const key    = `${s.employee_id}_${s.work_date}`
       const newKey = `${empId}_${dateStr}`
       if (key === newKey) return
-      // move: delete old, create new
       await onDeleteShift(s.id)
       await onDropShift({
         employeeId:  empId,
@@ -84,7 +104,7 @@ export default function Planning({ site, employees, shiftDefs, shifts, templates
     setDragSource(null)
   }
 
-  // ── Modal ──────────────────────────────────────────────────
+  // ── Modal ajout shift ──────────────────────────────────────
   function openModal(empId, date) {
     setModal({ empId, date })
     setModalDef(shiftDefs[0]?.id || '')
@@ -101,7 +121,6 @@ export default function Planning({ site, employees, shiftDefs, shifts, templates
   }
   async function confirmModal() {
     if (!modal) return
-    const def = shiftDefs.find(d => d.id === modalDef)
     await onDropShift({
       employeeId:  modal.empId,
       workDate:    modal.date,
@@ -112,44 +131,37 @@ export default function Planning({ site, employees, shiftDefs, shifts, templates
     setModal(null)
   }
 
-  // ── Save template ──────────────────────────────────────────
-  async function handleSaveTemplate() {
-    const name = window.prompt('Nom du plan de travail :', 'Semaine type')
-    if (!name) return
-    const slots = []
-    employees.forEach((emp, ei) => {
-      dates.forEach((d, di) => {
-        const ds = fmtDate(d)
-        const s = getShift(emp.id, ds)
-        if (s) {
-          slots.push({
-            employee_index: ei,
-            day_index:      di,
-            shift_def_id:   s.shift_def_id,
-            start_time:     s.start_time,
-            end_time:       s.end_time,
-          })
-        }
-      })
-    })
-    await onSaveTemplate(name, slots)
+  // ── Template builder ───────────────────────────────────────
+  function openTplBuilder() {
+    setTplName('')
+    setTplSlots([])
+    setTplModal(true)
+  }
+  function addTplSlot(dayIndex, defId) {
+    const def = shiftDefs.find(d => d.id === defId)
+    if (!def) return
+    setTplSlots(prev => [...prev, { day_index: dayIndex, shift_def_id: defId, _key: Date.now() + Math.random() }])
+  }
+  function removeTplSlot(key) {
+    setTplSlots(prev => prev.filter(s => s._key !== key))
+  }
+  async function saveTpl() {
+    if (!tplName.trim()) return
+    const slots = tplSlots.map(({ day_index, shift_def_id }) => ({ day_index, shift_def_id }))
+    await onSaveTemplate(tplName.trim(), slots)
+    setTplModal(false)
   }
 
-  // ── Apply template ─────────────────────────────────────────
-  async function applyTemplate(tpl) {
-    for (const slot of (tpl.week_template_slots || [])) {
-      const emp = employees[slot.employee_index]
-      if (!emp) continue
-      const d   = dates[slot.day_index]
-      if (!d) continue
-      await onDropShift({
-        employeeId:  emp.id,
-        workDate:    fmtDate(d),
-        shiftDefId:  slot.shift_def_id,
-        startTime:   slot.start_time,
-        endTime:     slot.end_time,
-      })
-    }
+  // ── Import template dans palette ───────────────────────────
+  function importTpl(tpl) {
+    const slots = (tpl.week_template_slots || []).map((s, i) => ({
+      ...s,
+      slotKey: `${s.day_index}_${s.shift_def_id}_${i}`
+    }))
+    setImportedPalette({ tplId: tpl.id, tplName: tpl.name, slots })
+  }
+  function clearImport() {
+    setImportedPalette(null)
   }
 
   const modalViolations = modal ? checkShift({ startTime: modalStart, endTime: modalEnd, workDate: modal.date }) : []
@@ -157,7 +169,7 @@ export default function Planning({ site, employees, shiftDefs, shifts, templates
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
-      {/* Palette */}
+      {/* Palette shifts génériques */}
       <div style={{ background: 'var(--bg2)', borderBottom: '1px solid var(--border)', padding: '10px 20px', flexShrink: 0 }}>
         <div style={{ fontSize: 10, fontFamily: "'Syne',sans-serif", fontWeight: 700, letterSpacing: '1.2px', textTransform: 'uppercase', color: 'var(--fg3)', marginBottom: 8 }}>
           Shifts — glisser vers le planning
@@ -174,6 +186,45 @@ export default function Planning({ site, employees, shiftDefs, shifts, templates
           ))}
         </div>
       </div>
+
+      {/* Palette importée depuis template */}
+      {importedPalette && (
+        <div style={{ background: 'color-mix(in srgb, var(--accent) 6%, var(--bg2))', borderBottom: '1px solid var(--accent)44', padding: '10px 20px', flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+            <div style={{ fontSize: 10, fontFamily: "'Syne',sans-serif", fontWeight: 700, letterSpacing: '1.2px', textTransform: 'uppercase', color: 'var(--accent)' }}>
+              Plan : {importedPalette.tplName}
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--fg2)' }}>— glisser sur les employés</div>
+            <button onClick={clearImport} style={{ marginLeft: 'auto', background: 'none', border: '1px solid var(--border)', color: 'var(--fg3)', padding: '2px 8px', borderRadius: 5, cursor: 'pointer', fontSize: 11 }}>✕ Fermer</button>
+          </div>
+          {/* Par jour */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 6 }}>
+            {FR_DAYS.map((day, di) => {
+              const daySlots = importedPalette.slots.filter(s => s.day_index === di)
+              return (
+                <div key={di} style={{ minHeight: 32 }}>
+                  <div style={{ fontSize: 9, fontFamily: "'Syne',sans-serif", fontWeight: 700, letterSpacing: 1, color: 'var(--fg3)', textTransform: 'uppercase', marginBottom: 4 }}>{day}</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                    {daySlots.map(slot => {
+                      const def = shiftDefs.find(d => d.id === slot.shift_def_id)
+                      if (!def) return null
+                      return (
+                        <div key={slot.slotKey} draggable
+                          onDragStart={() => onImportedDragStart(slot)}
+                          style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 8px', borderRadius: 6, cursor: 'grab', userSelect: 'none', background: def.color + '22', border: `1px solid ${def.color}55` }}>
+                          <span style={{ width: 6, height: 6, borderRadius: '50%', background: def.color, flexShrink: 0 }} />
+                          <span style={{ fontSize: 11, fontWeight: 600 }}>{def.label}</span>
+                        </div>
+                      )
+                    })}
+                    {daySlots.length === 0 && <div style={{ fontSize: 10, color: 'var(--fg3)', opacity: 0.4 }}>–</div>}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Week nav */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 20px', background: 'var(--bg2)', borderBottom: '1px solid var(--border2)', flexShrink: 0 }}>
@@ -220,14 +271,12 @@ export default function Planning({ site, employees, shiftDefs, shifts, templates
             const wh = getEmpWeekHours(emp.id)
             return (
               <div key={emp.id} style={{ display: 'grid', gridTemplateColumns: '160px repeat(7, 1fr) 56px', borderBottom: '1px solid var(--border2)', minHeight: 68 }}>
-                {/* Emp info */}
                 <div style={{ padding: '10px 8px 10px 16px', display: 'flex', flexDirection: 'column', justifyContent: 'center', borderRight: '1px solid var(--border2)' }}>
                   <div style={{ fontWeight: 600, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{emp.first_name} {emp.last_name}</div>
                   <div style={{ fontSize: 11, color: 'var(--fg2)', marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{emp.role}</div>
                   <div style={{ fontSize: 10, color: 'var(--fg3)', marginTop: 2 }}>{emp.contract_pct}%</div>
                 </div>
 
-                {/* Day cells */}
                 {dates.map((d, di) => {
                   const ds    = fmtDate(d)
                   const shift = getShift(emp.id, ds)
@@ -255,7 +304,6 @@ export default function Planning({ site, employees, shiftDefs, shifts, templates
                   )
                 })}
 
-                {/* Hours */}
                 <div style={{ borderLeft: '1px solid var(--border2)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 4 }}>
                   <div style={{ fontFamily: "'Syne',sans-serif", fontSize: 15, fontWeight: 700, color: wh > 45 ? '#f85149' : wh > 40 ? '#f59e0b' : wh > 0 ? '#3fb950' : 'var(--fg3)' }}>
                     {wh > 0 ? `${wh.toFixed(0)}h` : '–'}
@@ -272,17 +320,17 @@ export default function Planning({ site, employees, shiftDefs, shifts, templates
       <div style={{ background: 'var(--bg2)', borderTop: '1px solid var(--border)', padding: '8px 20px', display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0, flexWrap: 'wrap' }}>
         <div style={{ fontSize: 10, fontFamily: "'Syne',sans-serif", fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--fg3)', whiteSpace: 'nowrap' }}>Plans de travail</div>
         {templates.map(tpl => (
-          <button key={tpl.id} onClick={() => applyTemplate(tpl)}
-            style={{ fontSize: 11, fontWeight: 600, padding: '4px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg3)', color: 'var(--fg2)', cursor: 'pointer' }}>
+          <button key={tpl.id} onClick={() => importTpl(tpl)}
+            style={{ fontSize: 11, fontWeight: 600, padding: '4px 10px', borderRadius: 6, border: `1px solid ${importedPalette?.tplId === tpl.id ? 'var(--accent)' : 'var(--border)'}`, background: importedPalette?.tplId === tpl.id ? 'var(--accent-dim)' : 'var(--bg3)', color: importedPalette?.tplId === tpl.id ? 'var(--accent)' : 'var(--fg2)', cursor: 'pointer' }}>
             {tpl.name}
           </button>
         ))}
-        <button onClick={handleSaveTemplate} style={{ fontSize: 11, fontWeight: 600, padding: '5px 12px', borderRadius: 7, border: '1px dashed var(--border)', background: 'none', color: 'var(--fg3)', cursor: 'pointer', whiteSpace: 'nowrap', marginLeft: 'auto' }}>
-          + Sauver cette semaine
+        <button onClick={openTplBuilder} style={{ fontSize: 11, fontWeight: 600, padding: '5px 12px', borderRadius: 7, border: '1px dashed var(--border)', background: 'none', color: 'var(--fg3)', cursor: 'pointer', whiteSpace: 'nowrap', marginLeft: 'auto' }}>
+          + Créer un plan de travail
         </button>
       </div>
 
-      {/* Add shift modal */}
+      {/* Modal ajout shift */}
       {modal && (
         <div onClick={e => e.target === e.currentTarget && setModal(null)}
           style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.65)', backdropFilter: 'blur(4px)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -317,6 +365,68 @@ export default function Planning({ site, employees, shiftDefs, shifts, templates
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
               <button onClick={() => setModal(null)} style={{ background: 'none', border: '1px solid var(--border)', color: 'var(--fg2)', padding: '7px 16px', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>Annuler</button>
               <button onClick={confirmModal} style={{ background: 'var(--accent)', border: 'none', color: '#fff', padding: '7px 18px', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>Ajouter</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal création plan de travail */}
+      {tplModal && (
+        <div onClick={e => e.target === e.currentTarget && setTplModal(false)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.65)', backdropFilter: 'blur(4px)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 14, padding: 24, width: '92%', maxWidth: 760, boxShadow: '0 24px 64px rgba(0,0,0,.5)', maxHeight: '85vh', overflow: 'auto' }}>
+            <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 16, marginBottom: 16 }}>Créer un plan de travail</div>
+
+            <input
+              placeholder="Nom du plan (ex: Hiver, Été, Weekend...)"
+              value={tplName}
+              onChange={e => setTplName(e.target.value)}
+              style={{ ...inputStyle, marginBottom: 20 }}
+            />
+
+            {/* Grille jours × shifts à ajouter */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 8, marginBottom: 16 }}>
+              {FR_DAYS.map((day, di) => {
+                const daySlots = tplSlots.filter(s => s.day_index === di)
+                return (
+                  <div key={di} style={{ background: 'var(--bg3)', borderRadius: 8, padding: '8px 8px 10px' }}>
+                    <div style={{ fontSize: 10, fontFamily: "'Syne',sans-serif", fontWeight: 700, letterSpacing: 1, color: di >= 5 ? '#f59e0b' : 'var(--fg2)', textTransform: 'uppercase', marginBottom: 8, textAlign: 'center' }}>{day}</div>
+                    {/* Shifts ajoutés */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginBottom: 6 }}>
+                      {daySlots.map(slot => {
+                        const def = shiftDefs.find(d => d.id === slot.shift_def_id)
+                        if (!def) return null
+                        return (
+                          <div key={slot._key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '3px 6px', borderRadius: 5, background: def.color + '22', border: `1px solid ${def.color}44` }}>
+                            <span style={{ fontSize: 11, fontWeight: 600, color: def.color }}>{def.label}</span>
+                            <button onClick={() => removeTplSlot(slot._key)} style={{ background: 'none', border: 'none', color: 'var(--fg3)', cursor: 'pointer', fontSize: 12, padding: 0, lineHeight: 1 }}>✕</button>
+                          </div>
+                        )
+                      })}
+                    </div>
+                    {/* Sélecteur pour ajouter */}
+                    <select
+                      defaultValue=""
+                      onChange={e => { if (e.target.value) { addTplSlot(di, e.target.value); e.target.value = '' } }}
+                      style={{ width: '100%', background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--fg2)', padding: '4px 6px', borderRadius: 6, fontSize: 11, cursor: 'pointer', outline: 'none' }}>
+                      <option value="">+ Ajouter</option>
+                      {shiftDefs.map(d => <option key={d.id} value={d.id}>{d.label}</option>)}
+                    </select>
+                  </div>
+                )
+              })}
+            </div>
+
+            <div style={{ fontSize: 12, color: 'var(--fg2)', marginBottom: 16 }}>
+              {tplSlots.length} shift{tplSlots.length !== 1 ? 's' : ''} dans ce plan
+            </div>
+
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button onClick={() => setTplModal(false)} style={{ background: 'none', border: '1px solid var(--border)', color: 'var(--fg2)', padding: '7px 16px', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>Annuler</button>
+              <button onClick={saveTpl} disabled={!tplName.trim() || tplSlots.length === 0}
+                style={{ background: tplName.trim() && tplSlots.length > 0 ? 'var(--accent)' : 'var(--bg3)', border: 'none', color: tplName.trim() && tplSlots.length > 0 ? '#fff' : 'var(--fg3)', padding: '7px 18px', borderRadius: 8, cursor: tplName.trim() && tplSlots.length > 0 ? 'pointer' : 'not-allowed', fontSize: 13, fontWeight: 600 }}>
+                Sauvegarder
+              </button>
             </div>
           </div>
         </div>
