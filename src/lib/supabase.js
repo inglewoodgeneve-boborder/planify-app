@@ -15,24 +15,39 @@ export async function getSites() {
 // ─── EMPLOYEES ──────────────────────────────────────────────
 export async function getEmployees(siteId) {
   const { data, error } = await supabase
-    .from('employees')
-    .select('*')
-    .eq('site_id', siteId)
-    .eq('active', true)
-    .order('last_name')
+    .from('employees').select('*').eq('site_id', siteId).eq('active', true).order('last_name')
   if (error) throw error
   return data
+}
+
+export async function createEmployee(data) {
+  const { data: emp, error } = await supabase.from('employees').insert(data).select().single()
+  if (error) throw error
+  return emp
+}
+
+export async function deleteEmployee(id) {
+  const { error } = await supabase.from('employees').delete().eq('id', id)
+  if (error) throw error
 }
 
 // ─── SHIFT DEFS ─────────────────────────────────────────────
 export async function getShiftDefs(siteId) {
   const { data, error } = await supabase
-    .from('shift_defs')
-    .select('*')
-    .eq('site_id', siteId)
-    .order('sort_order')
+    .from('shift_defs').select('*').eq('site_id', siteId).order('sort_order')
   if (error) throw error
   return data
+}
+
+export async function createShiftDef(data) {
+  const { data: def, error } = await supabase.from('shift_defs').insert(data).select().single()
+  if (error) throw error
+  return def
+}
+
+export async function deleteShiftDef(id) {
+  const { error } = await supabase.from('shift_defs').delete().eq('id', id)
+  if (error) throw error
 }
 
 // ─── SHIFTS ─────────────────────────────────────────────────
@@ -48,13 +63,7 @@ export async function getShiftsForWeek(siteId, dateFrom, dateTo) {
 }
 
 export async function upsertShift(shift) {
-  // Insert simple — plusieurs shifts par employé/jour autorisés
-  const { id, ...payload } = shift
-  const { data, error } = await supabase
-    .from('shifts')
-    .insert(payload)
-    .select()
-    .single()
+  const { data, error } = await supabase.from('shifts').insert(shift).select().single()
   if (error) throw error
   return data
 }
@@ -65,12 +74,7 @@ export async function deleteShift(id) {
 }
 
 export async function confirmShift(id) {
-  const { data, error } = await supabase
-    .from('shifts')
-    .update({ status: 'confirmed' })
-    .eq('id', id)
-    .select()
-    .single()
+  const { data, error } = await supabase.from('shifts').update({ status: 'confirmed' }).eq('id', id).select().single()
   if (error) throw error
   return data
 }
@@ -78,31 +82,21 @@ export async function confirmShift(id) {
 // ─── CLOCKINGS ──────────────────────────────────────────────
 export async function getClockingsForDate(siteId, date) {
   const { data, error } = await supabase
-    .from('clockings')
-    .select('*, employees(id, first_name, last_name, role)')
-    .eq('site_id', siteId)
-    .eq('work_date', date)
+    .from('clockings').select('*, employees(id, first_name, last_name, role)').eq('site_id', siteId).eq('work_date', date)
   if (error) throw error
   return data
 }
 
 export async function clockIn(employeeId, siteId, date) {
   const { data, error } = await supabase
-    .from('clockings')
-    .insert({ employee_id: employeeId, site_id: siteId, work_date: date, clock_in: new Date().toISOString() })
-    .select()
-    .single()
+    .from('clockings').insert({ employee_id: employeeId, site_id: siteId, work_date: date, clock_in: new Date().toISOString() }).select().single()
   if (error) throw error
   return data
 }
 
 export async function clockOut(clockingId) {
   const { data, error } = await supabase
-    .from('clockings')
-    .update({ clock_out: new Date().toISOString() })
-    .eq('id', clockingId)
-    .select()
-    .single()
+    .from('clockings').update({ clock_out: new Date().toISOString() }).eq('id', clockingId).select().single()
   if (error) throw error
   return data
 }
@@ -110,25 +104,16 @@ export async function clockOut(clockingId) {
 // ─── TEMPLATES ──────────────────────────────────────────────
 export async function getTemplates(siteId) {
   const { data, error } = await supabase
-    .from('week_templates')
-    .select('*, week_template_slots(*)')
-    .eq('site_id', siteId)
-    .order('created_at')
+    .from('week_templates').select('*, week_template_slots(*)').eq('site_id', siteId).order('created_at')
   if (error) throw error
   return data
 }
 
 export async function saveTemplate(siteId, name, slots) {
-  const { data: tpl, error } = await supabase
-    .from('week_templates')
-    .insert({ site_id: siteId, name })
-    .select()
-    .single()
+  const { data: tpl, error } = await supabase.from('week_templates').insert({ site_id: siteId, name }).select().single()
   if (error) throw error
   if (slots.length > 0) {
-    const { error: slotError } = await supabase
-      .from('week_template_slots')
-      .insert(slots.map(s => ({ ...s, template_id: tpl.id })))
+    const { error: slotError } = await supabase.from('week_template_slots').insert(slots.map(s => ({ ...s, template_id: tpl.id })))
     if (slotError) throw slotError
   }
   return tpl
@@ -141,15 +126,13 @@ export async function deleteTemplate(id) {
 
 // ─── REALTIME ───────────────────────────────────────────────
 export function subscribeToShifts(siteId, callback) {
-  return supabase
-    .channel(`shifts:${siteId}`)
+  return supabase.channel(`shifts:${siteId}`)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'shifts', filter: `site_id=eq.${siteId}` }, callback)
     .subscribe()
 }
 
 export function subscribeToClockings(siteId, callback) {
-  return supabase
-    .channel(`clockings:${siteId}`)
+  return supabase.channel(`clockings:${siteId}`)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'clockings', filter: `site_id=eq.${siteId}` }, callback)
     .subscribe()
 }
