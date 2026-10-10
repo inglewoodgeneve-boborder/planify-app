@@ -1,0 +1,82 @@
+/* ============================================================
+   PLANIFY.CH — Design Tokens & Global Styles
+   ============================================================ */
+
+/* ── Dark (default) ─────────────────────────────────────── */
+:root {
+  --bg:          #0d1117;
+  --bg2:         #161b22;
+  --bg3:         #21262d;
+  --border:      #30363d;
+  --fg:          #e6edf3;
+  --fg2:         #8b949e;
+  --accent:      #58a6ff;
+  --accent-dim:  rgba(88, 166, 255, 0.12);
+}
+
+/* ── Light ──────────────────────────────────────────────── */
+:root[data-theme="light"] {
+  --bg:          #f6f8fa;
+  --bg2:         #ffffff;
+  --bg3:         #f0f2f4;
+  --border:      #d0d7de;
+  --fg:          #1f2328;
+  --fg2:         #656d76;
+  --accent:      #0969da;
+  --accent-dim:  rgba(9, 105, 218, 0.08);
+}
+
+/* ── Reset ──────────────────────────────────────────────── */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body, #root {
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: 'DM Sans', system-ui, -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--fg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── Scrollbars ─────────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--fg2);
+}
+
+/* ── Drag & Drop ────────────────────────────────────────── */
+[draggable="true"] {
+  cursor: grab;
+}
+[draggable="true"]:active {
+  cursor: grabbing;
+}
+
+/* ── Select & Input defaults ────────────────────────────── */
+select, input, button {
+  font-family: inherit;
+}
+
+/* ── Focus ring ─────────────────────────────────────────── */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
