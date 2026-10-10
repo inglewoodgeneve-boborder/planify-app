@@ -45,16 +45,19 @@ export default function Planning({ site, employees, shiftDefs, shifts, templates
   }
 
   // ── Drag & Drop ────────────────────────────────────────────
-  function onPaletteDragStart(def) {
+  function onPaletteDragStart(e, def) {
     setDragSource({ type: 'palette', def })
+    e.dataTransfer.setData('text/plain', def.id)
   }
-  function onImportedDragStart(slot) {
+  function onImportedDragStart(e, slot) {
     const def = shiftDefs.find(d => d.id === slot.shift_def_id)
     if (!def) return
     setDragSource({ type: 'imported', def, slot })
+    e.dataTransfer.setData('text/plain', def.id)
   }
-  function onAssignedDragStart(shift) {
+  function onAssignedDragStart(e, shift) {
     setDragSource({ type: 'assigned', shift })
+    e.dataTransfer.setData('text/plain', shift.id)
   }
   function onCellDragOver(e, empId, dateStr) {
     e.preventDefault()
@@ -142,7 +145,7 @@ export default function Planning({ site, employees, shiftDefs, shifts, templates
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           {shiftDefs.map(def => (
-            <div key={def.id} draggable onDragStart={() => onPaletteDragStart(def)}
+            <div key={def.id} draggable onDragStart={e => onPaletteDragStart(e, def)}
               style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '6px 12px 6px 8px', borderRadius: 8, cursor: 'grab', userSelect: 'none', background: def.color + '22', border: `1px solid ${def.color}55` }}>
               <span style={{ width: 8, height: 8, borderRadius: '50%', background: def.color, flexShrink: 0, display: 'block' }} />
               <span style={{ fontWeight: 600, fontSize: 12 }}>{def.label}</span>
@@ -173,7 +176,7 @@ export default function Planning({ site, employees, shiftDefs, shifts, templates
                       const def = shiftDefs.find(d => d.id === slot.shift_def_id)
                       if (!def) return null
                       return (
-                        <div key={slot.slotKey} draggable onDragStart={() => onImportedDragStart(slot)}
+                        <div key={slot.slotKey} draggable onDragStart={e => onImportedDragStart(e, slot)}
                           style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 8px', borderRadius: 6, cursor: 'grab', userSelect: 'none', background: def.color + '22', border: `1px solid ${def.color}55` }}>
                           <span style={{ width: 6, height: 6, borderRadius: '50%', background: def.color, flexShrink: 0 }} />
                           <span style={{ fontSize: 11, fontWeight: 600 }}>{def.label}</span>
@@ -259,7 +262,7 @@ export default function Planning({ site, employees, shiftDefs, shifts, templates
                         display: 'flex', flexDirection: 'column', gap: 3,
                       }}>
                       {dayShifts.map(shift => (
-                        <AssignedChip key={shift.id} shift={shift} onDelete={() => onDeleteShift(shift.id)} onDragStart={() => onAssignedDragStart(shift)} />
+                        <AssignedChip key={shift.id} shift={shift} onDelete={() => onDeleteShift(shift.id)} onDragStart={e => onAssignedDragStart(e, shift)} />
                       ))}
                       <div onClick={() => openModal(emp.id, ds)}
                         style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--fg3)', fontSize: 16, borderRadius: 6, border: '1px dashed var(--border2)', cursor: 'pointer', opacity: dayShifts.length > 0 ? 0.25 : 0.4, transition: 'opacity .15s', minHeight: dayShifts.length > 0 ? 22 : 52 }}
