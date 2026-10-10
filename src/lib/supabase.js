@@ -48,9 +48,11 @@ export async function getShiftsForWeek(siteId, dateFrom, dateTo) {
 }
 
 export async function upsertShift(shift) {
+  // Insert simple — plusieurs shifts par employé/jour autorisés
+  const { id, ...payload } = shift
   const { data, error } = await supabase
     .from('shifts')
-    .upsert(shift, { onConflict: 'employee_id,work_date' })
+    .insert(payload)
     .select()
     .single()
   if (error) throw error
@@ -117,14 +119,12 @@ export async function getTemplates(siteId) {
 }
 
 export async function saveTemplate(siteId, name, slots) {
-  // Create template
   const { data: tpl, error } = await supabase
     .from('week_templates')
     .insert({ site_id: siteId, name })
     .select()
     .single()
   if (error) throw error
-  // Insert slots
   if (slots.length > 0) {
     const { error: slotError } = await supabase
       .from('week_template_slots')
@@ -143,23 +143,13 @@ export async function deleteTemplate(id) {
 export function subscribeToShifts(siteId, callback) {
   return supabase
     .channel(`shifts:${siteId}`)
-    .on('postgres_changes', {
-      event: '*',
-      schema: 'public',
-      table: 'shifts',
-      filter: `site_id=eq.${siteId}`
-    }, callback)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'shifts', filter: `site_id=eq.${siteId}` }, callback)
     .subscribe()
 }
 
 export function subscribeToClockings(siteId, callback) {
   return supabase
     .channel(`clockings:${siteId}`)
-    .on('postgres_changes', {
-      event: '*',
-      schema: 'public',
-      table: 'clockings',
-      filter: `site_id=eq.${siteId}`
-    }, callback)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'clockings', filter: `site_id=eq.${siteId}` }, callback)
     .subscribe()
 }
