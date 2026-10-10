@@ -49,8 +49,15 @@ export default function App() {
   useEffect(() => {
     getSites().then(data => {
       setSites(data)
-      if (data.length > 0) setSiteId(data[0].id)
-    }).catch(console.error)
+      if (data.length > 0) {
+        setSiteId(data[0].id)
+      } else {
+        setLoading(false)
+      }
+    }).catch(err => {
+      console.error(err)
+      setLoading(false)
+    })
   }, [])
 
   // ── Load site data when site or week changes ───────────────
