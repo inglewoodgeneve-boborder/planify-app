@@ -203,11 +203,11 @@ export default function Config({ site, employees, shiftDefs, onCreateEmployee, o
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                     <div>
                       <label style={lbl}>Prénom *</label>
-                      <input value={emp.first_name} onChange={setF('first_name')} placeholder="Sophie" style={inp} />
+                      <input value={emp.first_name} onChange={setF('first_name')} placeholder="Prénom" style={inp} />
                     </div>
                     <div>
                       <label style={lbl}>Nom *</label>
-                      <input value={emp.last_name} onChange={setF('last_name')} placeholder="Bernard" style={inp} />
+                      <input value={emp.last_name} onChange={setF('last_name')} placeholder="Nom de famille" style={inp} />
                     </div>
                     <div>
                       <label style={lbl}>Date de naissance</label>
@@ -229,7 +229,7 @@ export default function Config({ site, employees, shiftDefs, onCreateEmployee, o
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                     <div>
                       <label style={lbl}>Email</label>
-                      <input type="email" value={emp.email} onChange={setF('email')} placeholder="sophie.bernard@email.com" style={inp} />
+                      <input type="email" value={emp.email} onChange={setF('email')} placeholder="email@exemple.com" style={inp} />
                     </div>
                     <div>
                       <label style={lbl}>Téléphone</label>
@@ -237,7 +237,7 @@ export default function Config({ site, employees, shiftDefs, onCreateEmployee, o
                     </div>
                     <div style={{ gridColumn: '1 / -1' }}>
                       <label style={lbl}>Rue et numéro</label>
-                      <input value={emp.address_street} onChange={setF('address_street')} placeholder="Rue du Mont-Blanc 12" style={inp} />
+                      <input value={emp.address_street} onChange={setF('address_street')} placeholder="Rue et numéro" style={inp} />
                     </div>
                     <div>
                       <label style={lbl}>NPA</label>
