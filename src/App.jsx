@@ -124,7 +124,7 @@ export default function App() {
   const handleClockIn = useCallback(async (employeeId) => {
     try {
       const rec = await clockIn(employeeId, siteId, fmtDate(new Date()))
-      setClockings(prev => [...prev.filter(c => c.employee_id !== employeeId), { ...rec, employees: employees.find(e => e.id === employeeId) }])
+      setClockings(prev => [...prev, { ...rec, employees: employees.find(e => e.id === employeeId) }])
       showToast('Entrée enregistrée ✓')
     } catch (err) { showToast('Erreur : ' + err.message, 'error') }
   }, [siteId, employees, showToast])
