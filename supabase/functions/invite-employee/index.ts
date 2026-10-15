@@ -18,11 +18,14 @@ Deno.serve(async (req) => {
       })
     }
 
-    const supabaseAdmin = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
-      { auth: { autoRefreshToken: false, persistSession: false } }
-    )
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
+    // Utilise le secret custom SERVICE_ROLE_KEY (ajouté manuellement dans Edge Functions > Secrets)
+    const serviceRoleKey = Deno.env.get('SERVICE_ROLE_KEY') ?? ''
+    const anonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? ''
+
+    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
+      auth: { autoRefreshToken: false, persistSession: false }
+    })
 
     // Vérifier que l'appelant est authentifié
     const authHeader = req.headers.get('Authorization')
@@ -32,11 +35,9 @@ Deno.serve(async (req) => {
       })
     }
 
-    const supabaseClient = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-      { global: { headers: { Authorization: authHeader } } }
-    )
+    const supabaseClient = createClient(supabaseUrl, anonKey, {
+      global: { headers: { Authorization: authHeader } }
+    })
 
     const { data: { user }, error: authError } = await supabaseClient.auth.getUser()
     if (authError || !user) {
@@ -59,7 +60,7 @@ Deno.serve(async (req) => {
     }
 
     if (!employee.email) {
-      return new Response(JSON.stringify({ error: 'Cet employé n\'a pas d\'adresse email' }), {
+      return new Response(JSON.stringify({ error: "Cet employé n'a pas d'adresse email" }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       })
     }
