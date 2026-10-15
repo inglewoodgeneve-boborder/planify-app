@@ -276,7 +276,6 @@ export default function App() {
               {view === 'pointage' && (
                 <Pointage site={site} employees={employees} shifts={shifts}
                   clockings={clockings}
-                  setClockings={setClockings}
                   onClockIn={handleClockIn} onClockOut={handleClockOut}
                   onRefresh={() => getClockingsForDate(siteId, fmtDate(new Date())).then(setClockings).catch(console.error)}
                   fmtDate={fmtDate} />
@@ -292,8 +291,7 @@ export default function App() {
               )}
               {view === 'rapports' && (
                 <Rapports site={site} employees={employees} shifts={shifts}
-                  clockings={clockings}
-                  setClockings={setClockings} weekDates={weekDates}
+                  clockings={clockings} weekDates={weekDates}
                   weekOffset={weekOffset} fmtDate={fmtDate} />
               )}
               {view === 'config' && (
