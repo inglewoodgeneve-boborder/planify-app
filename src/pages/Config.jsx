@@ -2,7 +2,7 @@ import { useState } from 'react'
 
 const COLORS = ['#818cf8','#34d399','#f59e0b','#f87171','#38bdf8','#a78bfa','#fb923c','#4ade80','#e879f9','#94a3b8']
 
-export default function Config({ site, employees, shiftDefs, onCreateEmployee, onDeleteEmployee, onCreateShiftDef, onDeleteShiftDef }) {
+export default function Config({ site, employees, shiftDefs, onCreateEmployee, onDeleteEmployee, onCreateShiftDef, onDeleteShiftDef, onResetPin }) {
   const [tab, setTab] = useState('shifts')
 
   // Shift def form
@@ -161,6 +161,10 @@ export default function Config({ site, employees, shiftDefs, onCreateEmployee, o
                     <div style={{ fontSize: 11, color: 'var(--fg2)', marginTop: 1 }}>{emp.role || '—'}</div>
                   </div>
                   <span style={{ fontSize: 12, color: 'var(--fg2)', background: 'var(--bg3)', padding: '3px 10px', borderRadius: 20 }}>{emp.contract_pct}%</span>
+                  <span style={{ fontSize: 11, color: emp.pin_hash ? 'var(--accent)' : 'var(--fg3)', background: emp.pin_hash ? 'var(--accent-dim)' : 'var(--bg3)', padding: '3px 10px', borderRadius: 20, fontFamily: 'monospace' }}>
+                    {emp.pin_hash ? '🔑 PIN ✓' : '🔑 sans PIN'}
+                  </span>
+                  {onResetPin && <button onClick={() => onResetPin(emp.id)} title="Générer un nouveau PIN" style={{ background: 'none', border: '1px solid var(--border)', color: 'var(--fg3)', padding: '4px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 11 }}>🔄 PIN</button>}
                   <button onClick={() => onDeleteEmployee(emp.id)} style={{ background: 'none', border: '1px solid var(--border)', color: 'var(--fg3)', padding: '4px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 11 }}>Supprimer</button>
                 </div>
               ))}

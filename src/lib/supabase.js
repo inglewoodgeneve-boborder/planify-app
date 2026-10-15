@@ -20,10 +20,20 @@ export async function getEmployees(siteId) {
   return data
 }
 
+function generatePin() {
+  return String(Math.floor(1000 + Math.random() * 9000))
+}
+function hashPin(pin) { return btoa('planify:' + pin) }
+
 export async function createEmployee(data) {
-  const { data: emp, error } = await supabase.from('employees').insert(data).select().single()
+  const pin = generatePin()
+  const { data: emp, error } = await supabase
+    .from('employees')
+    .insert({ ...data, pin_hash: hashPin(pin) })
+    .select()
+    .single()
   if (error) throw error
-  return emp
+  return { ...emp, _plainPin: pin }   // _plainPin ephemeral — never stored
 }
 
 export async function deleteEmployee(id) {

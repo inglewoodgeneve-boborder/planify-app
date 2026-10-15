@@ -54,7 +54,7 @@ export default function App() {
 
   const showToast = useCallback((msg, type = 'success') => {
     setToast({ msg, type })
-    setTimeout(() => setToast(null), 3500)
+    setTimeout(() => setToast(null), type === 'pin' ? 12000 : 3500)
   }, [])
 
   useEffect(() => {
@@ -141,7 +141,7 @@ export default function App() {
     try {
       const emp = await createEmployee({ ...data, site_id: siteId, active: true })
       setEmployees(prev => [...prev, emp])
-      showToast(`${emp.first_name} ${emp.last_name} ajouté ✓`)
+      showToast(`${emp.first_name} ${emp.last_name} ajouté — PIN kiosque : ${emp._plainPin}`, 'pin')
     } catch (err) { showToast('Erreur : ' + err.message, 'error') }
   }, [siteId, showToast])
 
@@ -152,6 +152,18 @@ export default function App() {
       showToast('Employé supprimé')
     } catch (err) { showToast('Erreur : ' + err.message, 'error') }
   }, [showToast])
+
+  const handleResetPin = useCallback(async (empId) => {
+    try {
+      const pin = String(Math.floor(1000 + Math.random() * 9000))
+      const pin_hash = btoa('planify:' + pin)
+      const { error } = await supabase.from('employees').update({ pin_hash }).eq('id', empId)
+      if (error) throw error
+      setEmployees(prev => prev.map(e => e.id === empId ? { ...e, pin_hash } : e))
+      const emp = employees.find(e => e.id === empId)
+      showToast(`🔑 Nouveau PIN pour ${emp?.first_name || ''} : ${pin}`, 'pin')
+    } catch (err) { showToast('Erreur : ' + err.message, 'error') }
+  }, [employees, showToast])
 
   const handleCreateShiftDef = useCallback(async (data) => {
     try {
@@ -216,6 +228,14 @@ export default function App() {
         </nav>
 
         <div style={{ padding: '8px 8px', borderTop: '1px solid var(--border)' }}>
+          {sidebarOpen && siteId && (
+            <a
+              href={`/kiosk?site=${siteId}&name=${encodeURIComponent(site?.name || '')}`}
+              target="_blank" rel="noreferrer"
+              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', borderRadius: 8, color: 'var(--fg2)', fontSize: 12, fontWeight: 600, textDecoration: 'none', marginBottom: 6, border: '1px solid var(--border)', background: 'var(--bg3)' }}>
+              <span>📲</span> Ouvrir le kiosque
+            </a>
+          )}
           <button onClick={() => document.documentElement.dataset.theme = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light'}
             style={{ width: '100%', background: 'none', border: '1px solid var(--border)', color: 'var(--fg2)', padding: '7px 0', borderRadius: 8, cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
             🌗{sidebarOpen && <span style={{ fontSize: 12 }}>Thème</span>}
@@ -265,7 +285,8 @@ export default function App() {
               {view === 'config' && (
                 <Config site={site} employees={employees} shiftDefs={shiftDefs}
                   onCreateEmployee={handleCreateEmployee} onDeleteEmployee={handleDeleteEmployee}
-                  onCreateShiftDef={handleCreateShiftDef} onDeleteShiftDef={handleDeleteShiftDef} />
+                  onCreateShiftDef={handleCreateShiftDef} onDeleteShiftDef={handleDeleteShiftDef}
+                  onResetPin={handleResetPin} />
               )}
               {view === 'plans' && (
                 <PlansDesTravail site={site} templates={templates}
@@ -284,8 +305,8 @@ export default function App() {
       </div>
 
       {toast && (
-        <div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 999, background: toast.type === 'error' ? '#7f1d1d' : '#14532d', color: 'white', padding: '11px 20px', borderRadius: 10, fontWeight: 600, fontSize: 13, boxShadow: '0 8px 32px rgba(0,0,0,0.4)', animation: 'fadeIn .2s ease' }}>
-          {toast.msg}
+        <div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 999, background: toast.type === 'error' ? '#7f1d1d' : toast.type === 'pin' ? '#1e3a5f' : '#14532d', color: 'white', padding: toast.type === 'pin' ? '14px 22px' : '11px 20px', borderRadius: 10, fontWeight: 600, fontSize: toast.type === 'pin' ? 15 : 13, boxShadow: '0 8px 32px rgba(0,0,0,0.4)', animation: 'fadeIn .2s ease', maxWidth: 320 }}>
+          {toast.type === 'pin' ? <span>🔑 {toast.msg}</span> : toast.msg}
         </div>
       )}
 
