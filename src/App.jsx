@@ -9,6 +9,7 @@ import Pointage from './pages/Pointage'
 import Rapports from './pages/Rapports'
 import Config   from './pages/Config'
 import PlansDesTravail from './pages/PlansDesTravail'
+import FeuilleHeure from './pages/FeuilleHeure'
 
 const NAV = [
   { id: 'planning',    label: 'Planning',    icon: '▦' },
@@ -293,12 +294,15 @@ export default function App() {
                 <PlansDesTravail site={site} templates={templates}
                   onDeleteTemplate={handleDeleteTemplate} />
               )}
-              {(view === 'absences' || view === 'vacances' || view === 'feuilles') && (
+              {(view === 'absences' || view === 'vacances') && (
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', flexDirection: 'column', gap: 8, color: 'var(--fg2)' }}>
                   <span style={{ fontSize: 36 }}>{NAV.find(n => n.id === view)?.icon}</span>
                   <span style={{ fontSize: 14, fontWeight: 500 }}>{NAV.find(n => n.id === view)?.label}</span>
                   <span style={{ fontSize: 12, opacity: 0.6 }}>En cours de développement</span>
                 </div>
+              )}
+              {view === 'feuilles' && (
+                <FeuilleHeure site={site} siteId={siteId} employees={employees} fmtDate={fmtDate} />
               )}
             </>
           )}
