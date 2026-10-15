@@ -19,7 +19,7 @@ function fmtDuration(min) {
   return `${h}h${String(m).padStart(2,'0')}`
 }
 
-export default function Pointage({ site, employees, shifts, clockings, onClockIn, onClockOut, fmtDate }) {
+export default function Pointage({ site, employees, shifts, clockings, onClockIn, onClockOut, onRefresh, fmtDate }) {
   const today = fmtDate(new Date())
   const [search, setSearch] = useState('')
 
@@ -54,6 +54,12 @@ export default function Pointage({ site, employees, shifts, clockings, onClockIn
           onChange={e => setSearch(e.target.value)}
           style={{ background: 'var(--bg3)', border: '1px solid var(--border)', color: 'var(--fg)', padding: '7px 12px', borderRadius: 8, fontSize: 13, width: 200, outline: 'none', fontFamily: "'DM Sans', sans-serif" }}
         />
+        {onRefresh && (
+          <button onClick={onRefresh} title="Rafraîchir les pointages"
+            style={{ background: 'var(--bg3)', border: '1px solid var(--border)', color: 'var(--fg2)', padding: '7px 12px', borderRadius: 8, cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>
+            ↻
+          </button>
+        )}
       </div>
 
       {/* Stats bar */}

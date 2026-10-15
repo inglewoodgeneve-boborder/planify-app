@@ -276,6 +276,7 @@ export default function App() {
                 <Pointage site={site} employees={employees} shifts={shifts}
                   clockings={clockings}
                   onClockIn={handleClockIn} onClockOut={handleClockOut}
+                  onRefresh={() => getClockingsForDate(siteId, fmtDate(new Date())).then(setClockings).catch(console.error)}
                   fmtDate={fmtDate} />
               )}
               {view === 'rapports' && (
