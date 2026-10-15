@@ -146,22 +146,22 @@ export default function Config({ site, employees, shiftDefs, onCreateEmployee, o
   }
 
   async function sendInvitation(employee) {
-    if (!employee.email) return
-    setInviting(employee.id)
-    try {
-      const { error } = await supabase.auth.admin.inviteUserByEmail(employee.email, {
-        data: { employee_id: employee.id, site_id: employee.site_id },
-        redirectTo: `${window.location.origin}/employee`,
-      })
-      if (error) throw error
-      await supabase.from('employees').update({ invitation_sent_at: new Date().toISOString() }).eq('id', employee.id)
-      alert(`Invitation envoyée à ${employee.email}`)
-    } catch (err) {
-      alert(`Erreur : ${err.message}`)
-    } finally {
-      setInviting(null)
-    }
+  if (!employee.email) return
+  setInviting(employee.id)
+  try {
+    const { data, error } = await supabase.functions.invoke('invite-employee', {
+      body: { employee_id: employee.id },
+    })
+    if (error) throw error
+    if (data?.error) throw new Error(data.error)
+    onUpdateEmployee(employee.id, { invitation_sent_at: new Date().toISOString() })
+    alert(`Invitation envoyée à ${employee.email}`)
+  } catch (err) {
+    alert(`Erreur : ${err.message}`)
+  } finally {
+    setInviting(null)
   }
+}
 
   const canSubmit = emp.first_name.trim() && emp.last_name.trim()
 
