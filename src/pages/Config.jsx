@@ -18,7 +18,7 @@ const EMPTY_EMP = {
   email: '', phone: '',
   address_street: '', address_zip: '', address_city: '', address_country: 'Suisse',
   birth_date: '', hire_date: '',
-  contract_type: 'cdi', hourly_rate: '', avs_number: '', weekly_hours_ref: '42',
+  contract_type: 'cdi', hourly_rate: '', avs_number: '', weekly_hours_ref: '42', monthly_salary: '',
 }
 
 export default function Config({ site, employees, shiftDefs, onCreateEmployee, onUpdateEmployee, onDeleteEmployee, onCreateShiftDef, onDeleteShiftDef, onResetPin }) {
@@ -62,6 +62,7 @@ export default function Config({ site, employees, shiftDefs, onCreateEmployee, o
       hourly_rate:     employee.hourly_rate != null ? String(employee.hourly_rate) : '',
       avs_number:      employee.avs_number || '',
       weekly_hours_ref: employee.weekly_hours_ref != null ? String(employee.weekly_hours_ref) : '42',
+      monthly_salary:  employee.monthly_salary != null ? String(employee.monthly_salary) : '',
     })
     setEditingId(employee.id)
     setShowForm(true)
@@ -351,6 +352,10 @@ export default function Config({ site, employees, shiftDefs, onCreateEmployee, o
                       </div>
                     )}
 
+                    <div>
+                      <label style={lbl}>Salaire brut mensuel (CHF)</label>
+                      <input type="number" step="1" min="0" value={emp.monthly_salary} onChange={setF('monthly_salary')} placeholder="4500" style={inp} />
+                    </div>
                     <div>
                       <label style={lbl}>Taux horaire (CHF)</label>
                       <input type="number" step="0.05" min="0" value={emp.hourly_rate} onChange={setF('hourly_rate')} placeholder="23.50" style={inp} />
