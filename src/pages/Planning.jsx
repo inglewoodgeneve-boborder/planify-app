@@ -40,6 +40,9 @@ export default function Planning({ site, employees, shiftDefs, shifts, templates
       return d >= dates[0] && d <= dates[6]
     }).length
   }
+  function getUnassignedShifts(dateStr) {
+    return shifts.filter(s => s.work_date === dateStr && !s.employee_id)
+  }
   function getISOWeek(d) {
     const jan4 = new Date(d.getFullYear(), 0, 4)
     return Math.ceil(((d - jan4) / 86400000 + jan4.getDay() + 1) / 7)
@@ -87,6 +90,23 @@ export default function Planning({ site, employees, shiftDefs, shifts, templates
       if (s.employee_id === empId && s.work_date === dateStr) return
       await onDeleteShift(s.id)
       await onDropShift({ employeeId: empId, workDate: dateStr, shiftDefId: s.shift_def_id, startTime: s.start_time, endTime: s.end_time })
+    }
+    dragRef.current = null
+    setDragSource(null)
+  }
+
+  async function onUnassignedDrop(e, dateStr) {
+    e.preventDefault()
+    setDropTarget(null)
+    const src = dragRef.current
+    if (!src) return
+    if (src.type === 'assigned' && src.shift.employee_id) {
+      // move assigned shift back to unassigned pool
+      await onDeleteShift(src.shift.id)
+      await onDropShift({ employeeId: null, workDate: dateStr, shiftDefId: src.shift.shift_def_id, startTime: src.shift.start_time, endTime: src.shift.end_time })
+    } else if (src.type === 'palette' || src.type === 'imported') {
+      const def = src.def
+      await onDropShift({ employeeId: null, workDate: dateStr, shiftDefId: def.id, startTime: def.start_time, endTime: def.end_time })
     }
     dragRef.current = null
     setDragSource(null)
@@ -236,6 +256,40 @@ export default function Planning({ site, employees, shiftDefs, shifts, templates
               )
             })}
             <div style={{ padding: '8px 4px', textAlign: 'center', borderLeft: '1px solid var(--border2)', fontSize: 10, fontFamily: "'Syne',sans-serif", fontWeight: 700, color: 'var(--fg3)' }}>H/SEM</div>
+          </div>
+
+          {/* Unassigned shifts row */}
+          <div style={{ display: 'grid', gridTemplateColumns: '160px repeat(7, 1fr) 56px', borderBottom: '2px solid var(--border)', background: 'color-mix(in srgb, var(--accent) 4%, var(--bg2))' }}>
+            <div style={{ padding: '8px 8px 8px 16px', display: 'flex', alignItems: 'center', borderRight: '1px solid var(--border2)', gap: 6 }}>
+              <span style={{ fontSize: 14 }}>📥</span>
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 700, fontFamily: "'Syne',sans-serif", color: 'var(--accent)', whiteSpace: 'nowrap' }}>À donner</div>
+                <div style={{ fontSize: 9, color: 'var(--fg3)', marginTop: 1 }}>Glisser vers un employé</div>
+              </div>
+            </div>
+            {dates.map((d, di) => {
+              const ds = fmtDate(d)
+              const unassigned = getUnassignedShifts(ds)
+              const key = `unassigned_${ds}`
+              const isDrop = dropTarget === key
+              return (
+                <div key={di}
+                  onDragOver={e => { e.preventDefault(); setDropTarget(key) }}
+                  onDragLeave={() => setDropTarget(null)}
+                  onDrop={e => onUnassignedDrop(e, ds)}
+                  style={{
+                    padding: 4, borderLeft: '1px solid var(--border2)', minHeight: 48,
+                    background: isDrop ? 'color-mix(in srgb, var(--accent) 15%, var(--bg))' : 'transparent',
+                    outline: isDrop ? '2px dashed var(--accent)' : 'none', outlineOffset: -3, borderRadius: isDrop ? 4 : 0,
+                    display: 'flex', flexDirection: 'column', gap: 3,
+                  }}>
+                  {unassigned.map(shift => (
+                    <UnassignedChip key={shift.id} shift={shift} onDelete={() => onDeleteShift(shift.id)} onDragStart={e => onAssignedDragStart(e, shift)} />
+                  ))}
+                </div>
+              )
+            })}
+            <div style={{ borderLeft: '1px solid var(--border2)' }} />
           </div>
 
           {/* Rows */}
@@ -398,6 +452,22 @@ export default function Planning({ site, employees, shiftDefs, shifts, templates
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+function UnassignedChip({ shift, onDelete, onDragStart }) {
+  const def   = shift.shift_defs || {}
+  const color = def.color || '#818cf8'
+  return (
+    <div draggable onDragStart={onDragStart}
+      style={{ background: color + '1a', border: `1px solid ${color}44`, borderLeft: `3px solid ${color}`, borderRadius: 7, padding: '4px 7px 4px 8px', cursor: 'grab', position: 'relative', userSelect: 'none', flexShrink: 0 }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color }}>{def.label || shift.start_time?.slice(0,5) || 'Shift'}</div>
+      {shift.start_time && <div style={{ fontSize: 10, opacity: .75, marginTop: 1 }}>{shift.start_time.slice(0,5)}–{shift.end_time.slice(0,5)}</div>}
+      <button onClick={e => { e.stopPropagation(); onDelete() }}
+        style={{ position: 'absolute', top: 3, right: 4, width: 16, height: 16, background: 'rgba(0,0,0,.3)', border: 'none', color: 'rgba(255,255,255,.6)', borderRadius: '50%', fontSize: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, lineHeight: 1 }}>
+        ✕
+      </button>
     </div>
   )
 }
