@@ -2,12 +2,19 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App'
 import Kiosk from './pages/Kiosk'
+import EmployeePage from './pages/Employee'
 import './index.css'
 
 // Simple path-based routing — no router library needed
 const path = window.location.pathname
 
-if (path === '/kiosk' || path.startsWith('/kiosk')) {
+if (path === '/employee' || path.startsWith('/employee')) {
+  ReactDOM.createRoot(document.getElementById('root')).render(
+    <React.StrictMode>
+      <EmployeePage />
+    </React.StrictMode>
+  )
+} else if (path === '/kiosk' || path.startsWith('/kiosk')) {
   // Load site info from URL param or localStorage
   const params = new URLSearchParams(window.location.search)
   const siteId   = params.get('site') || localStorage.getItem('kiosk_site_id') || null
