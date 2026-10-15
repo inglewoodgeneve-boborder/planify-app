@@ -9,16 +9,18 @@ import Pointage from './pages/Pointage'
 import Rapports from './pages/Rapports'
 import Config   from './pages/Config'
 import PlansDesTravail from './pages/PlansDesTravail'
+import Validation from './pages/Validation'
 
 const NAV = [
-  { id: 'planning',   label: 'Planning',    icon: '▦' },
-  { id: 'pointage',   label: 'Pointage',    icon: '⏱' },
-  { id: 'absences',   label: 'Absences',    icon: '🗓' },
-  { id: 'vacances',   label: 'Vacances',    icon: '✈' },
-  { id: 'feuilles',   label: 'Feuilles h.', icon: '📄' },
-  { id: 'config',     label: 'Config',      icon: '⚙️' },
-  { id: 'plans',     label: 'Plans',       icon: '📋' },
-  { id: 'rapports',   label: 'Rapports',    icon: '📊' },
+  { id: 'planning',    label: 'Planning',    icon: '▦' },
+  { id: 'pointage',    label: 'Pointage',    icon: '⏱' },
+  { id: 'validation',  label: 'Validation',  icon: '✅' },
+  { id: 'feuilles',    label: 'Feuilles h.', icon: '📄' },
+  { id: 'absences',    label: 'Absences',    icon: '🗓' },
+  { id: 'vacances',    label: 'Vacances',    icon: '✈' },
+  { id: 'config',      label: 'Config',      icon: '⚙️' },
+  { id: 'plans',       label: 'Plans',       icon: '📋' },
+  { id: 'rapports',    label: 'Rapports',    icon: '📊' },
 ]
 
 export default function App() {
@@ -277,6 +279,15 @@ export default function App() {
                   onClockIn={handleClockIn} onClockOut={handleClockOut}
                   onRefresh={() => getClockingsForDate(siteId, fmtDate(new Date())).then(setClockings).catch(console.error)}
                   fmtDate={fmtDate} />
+              )}
+              {view === 'validation' && (
+                <Validation
+                  site={site}
+                  employees={employees}
+                  siteId={siteId}
+                  fmtDate={fmtDate}
+                  onShowToast={showToast}
+                />
               )}
               {view === 'rapports' && (
                 <Rapports site={site} employees={employees} shifts={shifts}
