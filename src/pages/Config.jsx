@@ -21,6 +21,30 @@ const EMPTY_EMP = {
   contract_type: 'cdi', hourly_rate: '', avs_number: '', weekly_hours_ref: '42', monthly_salary: '',
 }
 
+function ContratFixeFields({ emp, setF, inp, lbl }) {
+  const ref = parseFloat(emp.weekly_hours_ref) || 0
+  const pct = parseFloat(emp.contract_pct) || 100
+  const eff = ref > 0 ? (ref * pct / 100).toFixed(2) : null
+  return (
+    <>
+      <div>
+        <label style={lbl}>Heures hebdo (100%)</label>
+        <input type="number" step="0.5" min="1" max="84" value={emp.weekly_hours_ref} onChange={setF('weekly_hours_ref')} placeholder="42" style={inp} />
+      </div>
+      <div>
+        <label style={lbl}>Taux d'occupation (%)</label>
+        <input type="number" min="10" max="100" value={emp.contract_pct} onChange={setF('contract_pct')} style={inp} />
+      </div>
+      <div style={{ gridColumn: '1 / -1' }}>
+        <label style={lbl}>Heures effectives / semaine</label>
+        <div style={{ ...inp, background: 'var(--bg3)', color: eff ? 'var(--accent)' : 'var(--fg3)', fontFamily: "'DM Mono',monospace", fontWeight: 700, fontSize: 15 }}>
+          {eff ? eff + ' h' : '—'}
+        </div>
+      </div>
+    </>
+  )
+}
+
 export default function Config({ site, employees, shiftDefs, onCreateEmployee, onUpdateEmployee, onDeleteEmployee, onCreateShiftDef, onDeleteShiftDef, onResetPin }) {
   const [tab, setTab]           = useState('shifts')
   const [showForm, setShowForm] = useState(false)
@@ -321,29 +345,7 @@ export default function Config({ site, employees, shiftDefs, onCreateEmployee, o
                       </select>
                     </div>
 
-                    {(emp.contract_type === 'cdi' || emp.contract_type === 'cdd') && (() => {
-                      const ref  = parseFloat(emp.weekly_hours_ref) || 0
-                      const pct  = parseFloat(emp.contract_pct) || 100
-                      const eff  = ref > 0 ? (ref * pct / 100).toFixed(2) : null
-                      return (
-                        <>
-                          <div>
-                            <label style={lbl}>Heures hebdo (100%)</label>
-                            <input type="number" step="0.5" min="1" max="84" value={emp.weekly_hours_ref} onChange={setF('weekly_hours_ref')} placeholder="42" style={inp} />
-                          </div>
-                          <div>
-                            <label style={lbl}>Taux d'occupation (%)</label>
-                            <input type="number" min="10" max="100" value={emp.contract_pct} onChange={setF('contract_pct')} style={inp} />
-                          </div>
-                          <div style={{ gridColumn: '1 / -1' }}>
-                            <label style={lbl}>Heures effectives / semaine</label>
-                            <div style={{ ...inp, background: 'var(--bg3)', color: eff ? 'var(--accent)' : 'var(--fg3)', fontFamily: "'DM Mono',monospace", fontWeight: 700, fontSize: 15 }}>
-                              {eff ? `${eff} h` : '—'}
-                            </div>
-                          </div>
-                        </>
-                      )
-                    })()}
+                    {(emp.contract_type === 'cdi' || emp.contract_type === 'cdd') && <ContratFixeFields emp={emp} setF={setF} inp={inp} lbl={lbl} />}
 
                     {(emp.contract_type === 'cdi_horaire' || emp.contract_type === 'cdd_horaire') && (
                       <div>
