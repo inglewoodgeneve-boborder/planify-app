@@ -23,7 +23,7 @@ const NAV = [
 ]
 
 export default function App() {
-  const [view, setView]             = useState('planning')
+  const [view, setView]             = useState(() => localStorage.getItem('planify_view') || 'planning')
   const [sidebarOpen, setSidebar]   = useState(true)
   const [sites, setSites]           = useState([])
   const [siteId, setSiteId]         = useState(null)
@@ -220,7 +220,7 @@ export default function App() {
           {NAV.map(({ id, label, icon }) => {
             const active = view === id
             return (
-              <button key={id} onClick={() => setView(id)} title={!sidebarOpen ? label : undefined} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: sidebarOpen ? '9px 12px' : '9px 0', justifyContent: sidebarOpen ? 'flex-start' : 'center', borderRadius: 8, border: 'none', cursor: 'pointer', background: active ? 'var(--accent-dim)' : 'none', color: active ? 'var(--accent)' : 'var(--fg2)', fontFamily: "'DM Sans', sans-serif", fontSize: 13, fontWeight: active ? 600 : 400, transition: 'background .15s, color .15s', whiteSpace: 'nowrap', width: '100%' }}>
+              <button key={id} onClick={() => { setView(id); localStorage.setItem('planify_view', id) }} title={!sidebarOpen ? label : undefined} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: sidebarOpen ? '9px 12px' : '9px 0', justifyContent: sidebarOpen ? 'flex-start' : 'center', borderRadius: 8, border: 'none', cursor: 'pointer', background: active ? 'var(--accent-dim)' : 'none', color: active ? 'var(--accent)' : 'var(--fg2)', fontFamily: "'DM Sans', sans-serif", fontSize: 13, fontWeight: active ? 600 : 400, transition: 'background .15s, color .15s', whiteSpace: 'nowrap', width: '100%' }}>
                 <span style={{ fontSize: 16, width: 20, textAlign: 'center', flexShrink: 0 }}>{icon}</span>
                 {sidebarOpen && label}
               </button>
