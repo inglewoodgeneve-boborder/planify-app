@@ -1,3 +1,4 @@
+FOUND
 import { useState, useEffect, useCallback } from 'react'
 import { supabase, getSites, getEmployees, getShiftDefs, getShiftsForWeek,
          upsertShift, deleteShift, getTemplates, saveTemplate,
@@ -148,9 +149,9 @@ export default function App() {
 
   const handleUpdateEmployee = useCallback(async (id, data) => {
     try {
-      const { error } = await supabase.from('employees').update(data).eq('id', id)
+      const { data: updated, error } = await supabase.from('employees').update(data).eq('id', id).select().single()
       if (error) throw error
-      setEmployees(prev => prev.map(e => e.id === id ? { ...e, ...data } : e))
+      setEmployees(prev => prev.map(e => e.id === id ? updated : e))
       showToast('Employé mis à jour')
     } catch (err) { showToast('Erreur : ' + err.message, 'error') }
   }, [showToast])
