@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 
 const MONTHS = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre']
 const DAYS   = ['Lu','Ma','Me','Je','Ve','Sa','Di']
@@ -14,54 +14,85 @@ function toISO(d) {
 }
 function daysInMonth(y, m) { return new Date(y, m + 1, 0).getDate() }
 function firstDow(y, m) {
-  // Monday=0
   const d = new Date(y, m, 1).getDay()
   return (d + 6) % 7
 }
 
 export default function DatePicker({
-  value,           // ISO string yyyy-mm-dd or ''
-  onChange,        // (isoString) => void
+  value,
+  onChange,
   placeholder = 'JJ.MM.AAAA',
-  minYear,         // default: current year - 100
-  maxYear,         // default: current year + 5
-  style = {},      // outer wrapper style
-  inputStyle = {}, // style merged onto the trigger button
-  compact = false, // smaller variant for date range pickers
+  minYear,
+  maxYear,
+  style = {},
+  inputStyle = {},
+  compact = false,
 }) {
   const now = new Date()
   const minY = minYear ?? now.getFullYear() - 100
   const maxY = maxYear ?? now.getFullYear() + 5
 
   const selected = parseISO(value)
-  const [open, setOpen]       = useState(false)
-  const [viewY, setViewY]     = useState(selected?.getFullYear() ?? now.getFullYear())
-  const [viewM, setViewM]     = useState(selected?.getMonth()    ?? now.getMonth())
+  const [open, setOpen]         = useState(false)
+  const [viewY, setViewY]       = useState(selected?.getFullYear() ?? now.getFullYear())
+  const [viewM, setViewM]       = useState(selected?.getMonth()    ?? now.getMonth())
   const [pickingY, setPickingY] = useState(false)
   const [pickingM, setPickingM] = useState(false)
+  const [popupPos, setPopupPos] = useState({ top: 0, left: 0 })
 
-  const wrapRef = useRef(null)
+  const triggerRef = useRef(null)
+  const popupRef   = useRef(null)
 
-  // Close on outside click
+  // Position popup fixed relative to trigger
+  const positionPopup = useCallback(() => {
+    if (!triggerRef.current) return
+    const rect = triggerRef.current.getBoundingClientRect()
+    const popupH = 320 // estimated height
+    const spaceBelow = window.innerHeight - rect.bottom
+    const top = spaceBelow > popupH
+      ? rect.bottom + 4
+      : rect.top - popupH - 4
+    const left = Math.min(rect.left, window.innerWidth - 280)
+    setPopupPos({ top, left })
+  }, [])
+
+  function openPicker() {
+    positionPopup()
+    setOpen(true)
+    setPickingY(false)
+    setPickingM(false)
+  }
+
+  // Close on outside click or scroll
   useEffect(() => {
     if (!open) return
-    function handler(e) {
-      if (wrapRef.current && !wrapRef.current.contains(e.target)) {
+    function handleClick(e) {
+      if (
+        triggerRef.current && !triggerRef.current.contains(e.target) &&
+        popupRef.current && !popupRef.current.contains(e.target)
+      ) {
         setOpen(false); setPickingY(false); setPickingM(false)
       }
     }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [open])
+    function handleScroll() {
+      positionPopup()
+    }
+    document.addEventListener('mousedown', handleClick)
+    window.addEventListener('scroll', handleScroll, true)
+    window.addEventListener('resize', positionPopup)
+    return () => {
+      document.removeEventListener('mousedown', handleClick)
+      window.removeEventListener('scroll', handleScroll, true)
+      window.removeEventListener('resize', positionPopup)
+    }
+  }, [open, positionPopup])
 
-  // When value changes externally, sync view
   useEffect(() => {
     if (selected) { setViewY(selected.getFullYear()); setViewM(selected.getMonth()) }
   }, [value])
 
   function selectDate(y, m, d) {
-    const iso = toISO(new Date(y, m, d))
-    onChange(iso)
+    onChange(toISO(new Date(y, m, d)))
     setOpen(false); setPickingY(false); setPickingM(false)
   }
 
@@ -74,7 +105,6 @@ export default function DatePicker({
     else setViewM(m => m + 1)
   }
 
-  // Build calendar grid
   const totalDays = daysInMonth(viewY, viewM)
   const startDow  = firstDow(viewY, viewM)
   const cells = []
@@ -89,7 +119,6 @@ export default function DatePicker({
     ? `${String(selected.getDate()).padStart(2,'0')}.${String(selected.getMonth()+1).padStart(2,'0')}.${selected.getFullYear()}`
     : ''
 
-  // Year grid for year picker
   const years = []
   for (let y = maxY; y >= minY; y--) years.push(y)
 
@@ -97,19 +126,22 @@ export default function DatePicker({
     wrap: { position: 'relative', display: 'inline-block', ...style },
     trigger: {
       display: 'flex', alignItems: 'center', gap: 6,
-      background: 'var(--bg)', border: '1px solid var(--border)', color: displayValue ? 'var(--fg)' : 'var(--fg3)',
+      background: 'var(--bg)', border: '1px solid var(--border)',
+      color: displayValue ? 'var(--fg)' : 'var(--fg3)',
       padding: compact ? '6px 10px' : '8px 12px',
       borderRadius: 8, cursor: 'pointer', fontSize: compact ? 12 : 13,
       fontFamily: "'DM Mono',monospace", outline: 'none',
-      minWidth: compact ? 110 : 130, justifyContent: 'space-between',
+      width: '100%', justifyContent: 'space-between', boxSizing: 'border-box',
       ...inputStyle,
     },
     popup: {
-      position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 9999,
+      position: 'fixed',
+      top: popupPos.top,
+      left: popupPos.left,
+      zIndex: 99999,
       background: 'var(--bg2)', border: '1px solid var(--border)',
-      borderRadius: 12, boxShadow: '0 8px 32px rgba(0,0,0,0.28)',
+      borderRadius: 12, boxShadow: '0 8px 40px rgba(0,0,0,0.35)',
       width: 272, overflow: 'hidden',
-      animation: 'fadeIn .12s ease',
     },
     navRow: {
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -120,7 +152,6 @@ export default function DatePicker({
       width: 28, height: 28, borderRadius: 6, cursor: 'pointer', fontSize: 15,
       display: 'flex', alignItems: 'center', justifyContent: 'center',
     },
-    monthYearRow: { display: 'flex', gap: 6 },
     headerBtn: (active) => ({
       background: active ? 'var(--accent)' : 'var(--bg3)',
       border: '1px solid ' + (active ? 'var(--accent)' : 'var(--border)'),
@@ -131,12 +162,11 @@ export default function DatePicker({
     dayGrid: { display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 2, padding: '4px 10px 12px' },
     dayLabel: { textAlign: 'center', fontSize: 10, fontWeight: 700, color: 'var(--fg3)', padding: '4px 0', letterSpacing: '0.04em' },
     cell: (d, isSel, isTod) => ({
-      textAlign: 'center', padding: '5px 0', borderRadius: 6, cursor: d ? 'pointer' : 'default',
-      fontSize: 13, fontWeight: isSel ? 700 : 400,
+      textAlign: 'center', padding: '5px 0', borderRadius: 6,
+      cursor: d ? 'pointer' : 'default', fontSize: 13, fontWeight: isSel ? 700 : 400,
       background: isSel ? 'var(--accent)' : isTod ? 'var(--accent-dim)' : 'transparent',
       color: isSel ? '#fff' : isTod ? 'var(--accent)' : d ? 'var(--fg)' : 'transparent',
       border: isTod && !isSel ? '1px solid var(--accent)55' : '1px solid transparent',
-      transition: 'background .1s',
     }),
     clearBtn: {
       display: 'block', width: '100%', background: 'none', border: 'none',
@@ -157,24 +187,19 @@ export default function DatePicker({
   }
 
   return (
-    <div style={s.wrap} ref={wrapRef}>
-      <button
-        type="button"
-        style={s.trigger}
-        onClick={() => { setOpen(o => !o); setPickingY(false); setPickingM(false) }}
-      >
+    <div style={s.wrap}>
+      <button type="button" ref={triggerRef} style={s.trigger} onClick={() => open ? setOpen(false) : openPicker()}>
         <span>{displayValue || placeholder}</span>
         <span style={{ fontSize: 12, opacity: 0.5 }}>📅</span>
       </button>
 
       {open && (
-        <div style={s.popup}>
-          {/* Nav row */}
+        <div ref={popupRef} style={s.popup}>
           <div style={s.navRow}>
             {!pickingY && !pickingM && (
               <button type="button" style={s.navBtn} onClick={prevMonth}>‹</button>
             )}
-            <div style={s.monthYearRow}>
+            <div style={{ display: 'flex', gap: 6 }}>
               <button type="button" style={s.headerBtn(pickingM)} onClick={() => { setPickingM(m => !m); setPickingY(false) }}>
                 {MONTHS[viewM]}
               </button>
@@ -188,38 +213,27 @@ export default function DatePicker({
             {(pickingY || pickingM) && <div style={{ width: 28 }} />}
           </div>
 
-          {/* Year picker */}
           {pickingY && (
             <div style={s.scrollGrid}>
               {years.map(y => (
-                <div key={y} style={s.scrollCell(y === viewY)} onClick={() => { setViewY(y); setPickingY(false) }}>
-                  {y}
-                </div>
+                <div key={y} style={s.scrollCell(y === viewY)} onClick={() => { setViewY(y); setPickingY(false) }}>{y}</div>
               ))}
             </div>
           )}
 
-          {/* Month picker */}
           {pickingM && (
             <div style={s.scrollGrid}>
               {MONTHS.map((m, i) => (
-                <div key={i} style={s.scrollCell(i === viewM)} onClick={() => { setViewM(i); setPickingM(false) }}>
-                  {m.slice(0,3)}
-                </div>
+                <div key={i} style={s.scrollCell(i === viewM)} onClick={() => { setViewM(i); setPickingM(false) }}>{m.slice(0,3)}</div>
               ))}
             </div>
           )}
 
-          {/* Calendar grid */}
           {!pickingY && !pickingM && (
             <div style={s.dayGrid}>
               {DAYS.map(d => <div key={d} style={s.dayLabel}>{d}</div>)}
               {cells.map((d, i) => (
-                <div
-                  key={i}
-                  style={s.cell(d, isSelected(d), isToday(d))}
-                  onClick={() => d && selectDate(viewY, viewM, d)}
-                >
+                <div key={i} style={s.cell(d, isSelected(d), isToday(d))} onClick={() => d && selectDate(viewY, viewM, d)}>
                   {d || ''}
                 </div>
               ))}
