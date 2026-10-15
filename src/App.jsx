@@ -8,6 +8,7 @@ import Planning from './pages/Planning'
 import Pointage from './pages/Pointage'
 import Rapports from './pages/Rapports'
 import Config   from './pages/Config'
+import PlansDesTravail from './pages/PlansDesTravail'
 
 const NAV = [
   { id: 'planning',   label: 'Planning',    icon: '▦' },
@@ -16,6 +17,7 @@ const NAV = [
   { id: 'vacances',   label: 'Vacances',    icon: '✈' },
   { id: 'feuilles',   label: 'Feuilles h.', icon: '📄' },
   { id: 'config',     label: 'Config',      icon: '⚙️' },
+  { id: 'plans',     label: 'Plans',       icon: '📋' },
   { id: 'rapports',   label: 'Rapports',    icon: '📊' },
 ]
 
@@ -167,6 +169,15 @@ export default function App() {
     } catch (err) { showToast('Erreur : ' + err.message, 'error') }
   }, [showToast])
 
+  const handleDeleteTemplate = useCallback(async (id) => {
+    try {
+      const { deleteTemplate } = await import('./lib/supabase')
+      await deleteTemplate(id)
+      setTemplates(prev => prev.filter(t => t.id !== id))
+      showToast('Plan supprimé')
+    } catch (err) { showToast('Erreur : ' + err.message, 'error') }
+  }, [showToast])
+
   const site = sites.find(s => s.id === siteId)
   const W = sidebarOpen ? 220 : 64
 
@@ -256,6 +267,10 @@ export default function App() {
                 <Config site={site} employees={employees} shiftDefs={shiftDefs}
                   onCreateEmployee={handleCreateEmployee} onDeleteEmployee={handleDeleteEmployee}
                   onCreateShiftDef={handleCreateShiftDef} onDeleteShiftDef={handleDeleteShiftDef} />
+              )}
+              {view === 'plans' && (
+                <PlansDesTravail site={site} templates={templates}
+                  onDeleteTemplate={handleDeleteTemplate} />
               )}
               {(view === 'absences' || view === 'vacances' || view === 'feuilles') && (
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', flexDirection: 'column', gap: 8, color: 'var(--fg2)' }}>
