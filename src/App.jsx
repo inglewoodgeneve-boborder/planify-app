@@ -1,4 +1,3 @@
-FOUND
 import { useState, useEffect, useCallback } from 'react'
 import { supabase, getSites, getEmployees, getShiftDefs, getShiftsForWeek,
          upsertShift, deleteShift, getTemplates, saveTemplate,
