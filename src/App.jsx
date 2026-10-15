@@ -146,6 +146,15 @@ export default function App() {
     } catch (err) { showToast('Erreur : ' + err.message, 'error') }
   }, [siteId, showToast])
 
+  const handleUpdateEmployee = useCallback(async (id, data) => {
+    try {
+      const { error } = await supabase.from('employees').update(data).eq('id', id)
+      if (error) throw error
+      setEmployees(prev => prev.map(e => e.id === id ? { ...e, ...data } : e))
+      showToast('Employé mis à jour')
+    } catch (err) { showToast('Erreur : ' + err.message, 'error') }
+  }, [showToast])
+
   const handleDeleteEmployee = useCallback(async (id) => {
     try {
       await deleteEmployee(id)
@@ -286,7 +295,7 @@ export default function App() {
               )}
               {view === 'config' && (
                 <Config site={site} employees={employees} shiftDefs={shiftDefs}
-                  onCreateEmployee={handleCreateEmployee} onDeleteEmployee={handleDeleteEmployee}
+                  onCreateEmployee={handleCreateEmployee} onUpdateEmployee={handleUpdateEmployee} onDeleteEmployee={handleDeleteEmployee}
                   onCreateShiftDef={handleCreateShiftDef} onDeleteShiftDef={handleDeleteShiftDef}
                   onResetPin={handleResetPin} />
               )}

@@ -5,11 +5,13 @@ import DatePicker from '../components/DatePicker'
 const COLORS = ['#818cf8','#34d399','#f59e0b','#f87171','#38bdf8','#a78bfa','#fb923c','#4ade80','#e879f9','#94a3b8']
 
 const CONTRACT_TYPES = [
-  { value: 'cdi',        label: 'CDI — Durée indéterminée' },
-  { value: 'cdd',        label: 'CDD — Durée déterminée' },
-  { value: 'temporaire', label: 'Temporaire' },
-  { value: 'apprenti',   label: 'Apprentissage' },
+  { value: 'cdi',         label: 'CDI — Fixe durée indéterminée' },
+  { value: 'cdd',         label: 'CDD — Fixe durée déterminée' },
+  { value: 'cdi_horaire', label: 'CDI horaire' },
+  { value: 'cdd_horaire', label: 'CDD horaire' },
 ]
+
+const CONTRACT_LABEL = Object.fromEntries(CONTRACT_TYPES.map(c => [c.value, c.label]))
 
 const EMPTY_EMP = {
   first_name: '', last_name: '', role: '', contract_pct: '100',
@@ -19,9 +21,10 @@ const EMPTY_EMP = {
   contract_type: 'cdi', hourly_rate: '', avs_number: '',
 }
 
-export default function Config({ site, employees, shiftDefs, onCreateEmployee, onDeleteEmployee, onCreateShiftDef, onDeleteShiftDef, onResetPin }) {
+export default function Config({ site, employees, shiftDefs, onCreateEmployee, onUpdateEmployee, onDeleteEmployee, onCreateShiftDef, onDeleteShiftDef, onResetPin }) {
   const [tab, setTab]           = useState('shifts')
   const [showForm, setShowForm] = useState(false)
+  const [editingId, setEditingId] = useState(null)   // null = création, id = édition
   const [emp, setEmp]           = useState(EMPTY_EMP)
   const [submitting, setSubmitting] = useState(false)
   const [inviting, setInviting] = useState(null)
@@ -35,6 +38,41 @@ export default function Config({ site, employees, shiftDefs, onCreateEmployee, o
   function setF(field) { return e => setEmp(prev => ({ ...prev, [field]: e.target.value })) }
   function setD(field) { return v => setEmp(prev => ({ ...prev, [field]: v })) }
 
+  function openNew() {
+    setEmp(EMPTY_EMP)
+    setEditingId(null)
+    setShowForm(true)
+  }
+
+  function openEdit(employee) {
+    setEmp({
+      first_name:      employee.first_name || '',
+      last_name:       employee.last_name || '',
+      role:            employee.role || '',
+      contract_pct:    String(employee.contract_pct || 100),
+      email:           employee.email || '',
+      phone:           employee.phone || '',
+      address_street:  employee.address_street || '',
+      address_zip:     employee.address_zip || '',
+      address_city:    employee.address_city || '',
+      address_country: employee.address_country || 'Suisse',
+      birth_date:      employee.birth_date || '',
+      hire_date:       employee.hire_date || '',
+      contract_type:   employee.contract_type || 'cdi',
+      hourly_rate:     employee.hourly_rate != null ? String(employee.hourly_rate) : '',
+      avs_number:      employee.avs_number || '',
+    })
+    setEditingId(employee.id)
+    setShowForm(true)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  function closeForm() {
+    setShowForm(false)
+    setEmp(EMPTY_EMP)
+    setEditingId(null)
+  }
+
   async function submitDef(e) {
     e.preventDefault()
     if (!defLabel.trim()) return
@@ -42,30 +80,38 @@ export default function Config({ site, employees, shiftDefs, onCreateEmployee, o
     setDefLabel(''); setDefStart('08:00'); setDefEnd('16:00'); setDefColor(COLORS[0])
   }
 
+  function buildPayload() {
+    return {
+      first_name:      emp.first_name.trim(),
+      last_name:       emp.last_name.trim(),
+      role:            emp.role.trim() || null,
+      contract_pct:    parseInt(emp.contract_pct) || 100,
+      email:           emp.email.trim() || null,
+      phone:           emp.phone.trim() || null,
+      address_street:  emp.address_street.trim() || null,
+      address_zip:     emp.address_zip.trim() || null,
+      address_city:    emp.address_city.trim() || null,
+      address_country: emp.address_country.trim() || null,
+      birth_date:      emp.birth_date || null,
+      hire_date:       emp.hire_date || null,
+      contract_type:   emp.contract_type || 'cdi',
+      hourly_rate:     emp.hourly_rate ? parseFloat(emp.hourly_rate) : null,
+      avs_number:      emp.avs_number.trim() || null,
+    }
+  }
+
   async function submitEmp(e) {
     e.preventDefault()
     if (!emp.first_name.trim() || !emp.last_name.trim()) return
     setSubmitting(true)
     try {
-      await onCreateEmployee({
-        first_name:     emp.first_name.trim(),
-        last_name:      emp.last_name.trim(),
-        role:           emp.role.trim() || null,
-        contract_pct:   parseInt(emp.contract_pct) || 100,
-        email:          emp.email.trim() || null,
-        phone:          emp.phone.trim() || null,
-        address_street: emp.address_street.trim() || null,
-        address_zip:    emp.address_zip.trim() || null,
-        address_city:   emp.address_city.trim() || null,
-        address_country: emp.address_country.trim() || null,
-        birth_date:     emp.birth_date || null,
-        hire_date:      emp.hire_date || null,
-        contract_type:  emp.contract_type || 'cdi',
-        hourly_rate:    emp.hourly_rate ? parseFloat(emp.hourly_rate) : null,
-        avs_number:     emp.avs_number.trim() || null,
-      })
-      setEmp(EMPTY_EMP)
-      setShowForm(false)
+      if (editingId) {
+        if (onUpdateEmployee) await onUpdateEmployee(editingId, buildPayload())
+        else await supabase.from('employees').update(buildPayload()).eq('id', editingId)
+      } else {
+        await onCreateEmployee(buildPayload())
+      }
+      closeForm()
     } finally {
       setSubmitting(false)
     }
@@ -181,7 +227,7 @@ export default function Config({ site, employees, shiftDefs, onCreateEmployee, o
 
           {/* Bouton d'ouverture */}
           {!showForm && (
-            <button onClick={() => setShowForm(true)} style={{ ...btnPrimary, marginBottom: 20, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button onClick={openNew} style={{ ...btnPrimary, marginBottom: 20, display: 'flex', alignItems: 'center', gap: 8 }}>
               + Nouvel employé
             </button>
           )}
@@ -192,8 +238,10 @@ export default function Config({ site, employees, shiftDefs, onCreateEmployee, o
               
               {/* Header */}
               <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 15 }}>Nouvel employé</div>
-                <button type="button" onClick={() => { setShowForm(false); setEmp(EMPTY_EMP) }} style={{ background: 'none', border: 'none', color: 'var(--fg3)', cursor: 'pointer', fontSize: 18, lineHeight: 1 }}>×</button>
+                <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 15 }}>
+                  {editingId ? 'Modifier l\'employé' : 'Nouvel employé'}
+                </div>
+                <button type="button" onClick={closeForm} style={{ background: 'none', border: 'none', color: 'var(--fg3)', cursor: 'pointer', fontSize: 18, lineHeight: 1 }}>×</button>
               </div>
 
               <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 28 }}>
@@ -221,7 +269,6 @@ export default function Config({ site, employees, shiftDefs, onCreateEmployee, o
                   </div>
                 </div>
 
-                {/* Séparateur */}
                 <div style={{ borderTop: '1px solid var(--border)' }} />
 
                 {/* Section Contact */}
@@ -248,14 +295,13 @@ export default function Config({ site, employees, shiftDefs, onCreateEmployee, o
                       <label style={lbl}>Ville</label>
                       <input value={emp.address_city} onChange={setF('address_city')} placeholder="Genève" style={inp} />
                     </div>
-                    <div style={{ display:'grid', gridTemplateColumns:'1fr', gap:4 }}>
+                    <div>
                       <label style={lbl}>Pays</label>
                       <input value={emp.address_country} onChange={setF('address_country')} placeholder="Suisse" style={inp} />
                     </div>
                   </div>
                 </div>
 
-                {/* Séparateur */}
                 <div style={{ borderTop: '1px solid var(--border)' }} />
 
                 {/* Section Contrat */}
@@ -297,9 +343,9 @@ export default function Config({ site, employees, shiftDefs, onCreateEmployee, o
                     : '* Prénom et nom requis'}
                 </div>
                 <div style={{ display: 'flex', gap: 8 }}>
-                  <button type="button" onClick={() => { setShowForm(false); setEmp(EMPTY_EMP) }} style={btnGhost}>Annuler</button>
+                  <button type="button" onClick={closeForm} style={btnGhost}>Annuler</button>
                   <button type="submit" disabled={!canSubmit || submitting} style={canSubmit && !submitting ? btnPrimary : btnDisabled}>
-                    {submitting ? '…' : '+ Créer l\'employé'}
+                    {submitting ? '…' : editingId ? '✓ Enregistrer' : '+ Créer l\'employé'}
                   </button>
                 </div>
               </div>
@@ -311,39 +357,40 @@ export default function Config({ site, employees, shiftDefs, onCreateEmployee, o
             <div style={{ textAlign: 'center', color: 'var(--fg3)', fontSize: 13, padding: 40 }}>Aucun employé — clique sur "+ Nouvel employé" ci-dessus</div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {employees.map(emp => (
-                <div key={emp.id} style={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 10, padding: '14px 16px' }}>
+              {employees.map(e => (
+                <div key={e.id} style={{ background: 'var(--bg2)', border: editingId === e.id ? '1px solid var(--accent)' : '1px solid var(--border)', borderRadius: 10, padding: '14px 16px', transition: 'border-color .15s' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                     <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'var(--accent-dim)', border: '1px solid var(--accent)44', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 13, color: 'var(--accent)', flexShrink: 0 }}>
-                      {emp.first_name[0]}{emp.last_name[0]}
+                      {e.first_name[0]}{e.last_name[0]}
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontWeight: 600, fontSize: 13 }}>{emp.first_name} {emp.last_name}</div>
+                      <div style={{ fontWeight: 600, fontSize: 13 }}>{e.first_name} {e.last_name}</div>
                       <div style={{ fontSize: 11, color: 'var(--fg2)', marginTop: 2, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                        {emp.role && <span>{emp.role}</span>}
-                        {emp.contract_type && <span style={{ textTransform: 'uppercase', letterSpacing: '0.04em' }}>{emp.contract_type}</span>}
-                        {emp.email && <span style={{ color: 'var(--fg3)' }}>{emp.email}</span>}
-                        {emp.phone && <span style={{ color: 'var(--fg3)' }}>{emp.phone}</span>}
+                        {e.role && <span>{e.role}</span>}
+                        {e.contract_type && <span style={{ textTransform: 'uppercase', letterSpacing: '0.04em' }}>{CONTRACT_LABEL[e.contract_type] || e.contract_type}</span>}
+                        {e.email && <span style={{ color: 'var(--fg3)' }}>{e.email}</span>}
+                        {e.phone && <span style={{ color: 'var(--fg3)' }}>{e.phone}</span>}
                       </div>
                     </div>
-                    <span style={{ fontSize: 11, color: 'var(--fg2)', background: 'var(--bg3)', padding: '3px 10px', borderRadius: 20, flexShrink: 0 }}>{emp.contract_pct}%</span>
-                    <span style={{ fontSize: 11, color: emp.pin_hash ? 'var(--accent)' : 'var(--fg3)', background: emp.pin_hash ? 'var(--accent-dim)' : 'var(--bg3)', padding: '3px 10px', borderRadius: 20, fontFamily: 'monospace', flexShrink: 0 }}>
-                      {emp.pin_hash ? '🔑 PIN ✓' : '🔑 sans PIN'}
+                    <span style={{ fontSize: 11, color: 'var(--fg2)', background: 'var(--bg3)', padding: '3px 10px', borderRadius: 20, flexShrink: 0 }}>{e.contract_pct}%</span>
+                    <span style={{ fontSize: 11, color: e.pin_hash ? 'var(--accent)' : 'var(--fg3)', background: e.pin_hash ? 'var(--accent-dim)' : 'var(--bg3)', padding: '3px 10px', borderRadius: 20, fontFamily: 'monospace', flexShrink: 0 }}>
+                      {e.pin_hash ? '🔑 PIN ✓' : '🔑 sans PIN'}
                     </span>
-                    {onResetPin && <button onClick={() => onResetPin(emp.id)} style={btnGhost}>🔄 PIN</button>}
-                    <button onClick={() => onDeleteEmployee(emp.id)} style={btnGhost}>Supprimer</button>
+                    <button onClick={() => openEdit(e)} style={{ ...btnGhost, color: 'var(--accent)', borderColor: 'var(--accent)44' }}>✏️ Modifier</button>
+                    {onResetPin && <button onClick={() => onResetPin(e.id)} style={btnGhost}>🔄 PIN</button>}
+                    <button onClick={() => onDeleteEmployee(e.id)} style={btnGhost}>Supprimer</button>
                   </div>
 
-                  {emp.email && (
+                  {e.email && (
                     <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 10 }}>
                       <div style={{ flex: 1, fontSize: 11, color: 'var(--fg3)' }}>
-                        {emp.invitation_sent_at
-                          ? `✉️ Invitation envoyée le ${new Date(emp.invitation_sent_at).toLocaleDateString('fr-CH')}`
-                          : emp.auth_user_id ? '✅ Compte actif' : '⚠️ Compte employé non créé'}
+                        {e.invitation_sent_at
+                          ? `✉️ Invitation envoyée le ${new Date(e.invitation_sent_at).toLocaleDateString('fr-CH')}`
+                          : e.auth_user_id ? '✅ Compte actif' : '⚠️ Compte employé non créé'}
                       </div>
-                      {!emp.auth_user_id && (
-                        <button onClick={() => sendInvitation(emp)} disabled={inviting === emp.id} style={{ ...btnGhost, color: 'var(--fg)', fontWeight: 600 }}>
-                          {inviting === emp.id ? '…' : "✉️ Envoyer l'invitation"}
+                      {!e.auth_user_id && (
+                        <button onClick={() => sendInvitation(e)} disabled={inviting === e.id} style={{ ...btnGhost, color: 'var(--fg)', fontWeight: 600 }}>
+                          {inviting === e.id ? '…' : "✉️ Envoyer l'invitation"}
                         </button>
                       )}
                     </div>
@@ -358,9 +405,9 @@ export default function Config({ site, employees, shiftDefs, onCreateEmployee, o
   )
 }
 
-const lbl         = { fontSize: 11, color: 'var(--fg2)', fontWeight: 600, display: 'block', marginBottom: 5, letterSpacing: '0.04em', textTransform: 'uppercase' }
-const inp         = { width: '100%', background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--fg)', padding: '8px 10px', borderRadius: 8, fontSize: 13, fontFamily: "'DM Sans',sans-serif", outline: 'none', boxSizing: 'border-box' }
+const lbl          = { fontSize: 11, color: 'var(--fg2)', fontWeight: 600, display: 'block', marginBottom: 5, letterSpacing: '0.04em', textTransform: 'uppercase' }
+const inp          = { width: '100%', background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--fg)', padding: '8px 10px', borderRadius: 8, fontSize: 13, fontFamily: "'DM Sans',sans-serif", outline: 'none', boxSizing: 'border-box' }
 const sectionTitle = { fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--fg3)', marginBottom: 14 }
-const btnPrimary  = { background: 'var(--accent)', border: 'none', color: '#fff', padding: '8px 20px', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: "'DM Sans',sans-serif" }
-const btnDisabled = { background: 'var(--bg3)', border: 'none', color: 'var(--fg3)', padding: '8px 20px', borderRadius: 8, cursor: 'not-allowed', fontSize: 13, fontWeight: 600, fontFamily: "'DM Sans',sans-serif" }
-const btnGhost    = { background: 'none', border: '1px solid var(--border)', color: 'var(--fg3)', padding: '4px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 11, fontFamily: "'DM Sans',sans-serif" }
+const btnPrimary   = { background: 'var(--accent)', border: 'none', color: '#fff', padding: '8px 20px', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: "'DM Sans',sans-serif" }
+const btnDisabled  = { background: 'var(--bg3)', border: 'none', color: 'var(--fg3)', padding: '8px 20px', borderRadius: 8, cursor: 'not-allowed', fontSize: 13, fontWeight: 600, fontFamily: "'DM Sans',sans-serif" }
+const btnGhost     = { background: 'none', border: '1px solid var(--border)', color: 'var(--fg3)', padding: '4px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 11, fontFamily: "'DM Sans',sans-serif" }
