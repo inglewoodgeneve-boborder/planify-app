@@ -64,21 +64,24 @@ export default function Kiosk({ siteId, siteName }) {
       setTimeout(() => { setPin(''); setError('') }, 1200)
       return
     }
-    const clocking = clockings.find(c => c.employee_id === emp.id)
+    // Last open clocking (clock_in but no clock_out)
+    const openClocking = clockings.find(c => c.employee_id === emp.id && c.clock_in && !c.clock_out)
+    const now = new Date()
     try {
-      if (!clocking) {
+      if (!openClocking) {
+        // New clock-in (first entry or re-entry after a break)
         await supabase.from('clockings').insert({
           employee_id: emp.id, site_id: siteId, work_date: today,
-          clock_in: new Date().toISOString()
+          clock_in: now.toISOString()
         })
-        setSuccess({ name: emp.first_name, action: 'entrée', time: fmtTime(new Date().toISOString()) })
-      } else if (!clocking.clock_out) {
-        await supabase.from('clockings').update({ clock_out: new Date().toISOString() }).eq('id', clocking.id)
-        setSuccess({ name: emp.first_name, action: 'sortie', time: fmtTime(new Date().toISOString()) })
+        setSuccess({ name: emp.first_name, action: 'entrée', time: fmtTime(now.toISOString()) })
       } else {
-        setError(`${emp.first_name} a déjà terminé sa journée.`)
-        setTimeout(() => { setPin(''); setError('') }, 2000)
-        return
+        // Clock-out with duration
+        const duration_min = Math.round((now - new Date(openClocking.clock_in)) / 60000)
+        await supabase.from('clockings')
+          .update({ clock_out: now.toISOString(), duration_min })
+          .eq('id', openClocking.id)
+        setSuccess({ name: emp.first_name, action: 'sortie', time: fmtTime(now.toISOString()) })
       }
       await reload()
       setPin('')

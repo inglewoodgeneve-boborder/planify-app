@@ -131,11 +131,12 @@ export default function App() {
 
   const handleClockOut = useCallback(async (clockingId) => {
     try {
-      const rec = await clockOut(clockingId)
+      const clocking = clockings.find(c => c.id === clockingId)
+      const rec = await clockOut(clockingId, clocking?.clock_in)
       setClockings(prev => prev.map(c => c.id === clockingId ? { ...c, ...rec } : c))
       showToast('Sortie enregistrée ✓')
     } catch (err) { showToast('Erreur : ' + err.message, 'error') }
-  }, [showToast])
+  }, [clockings, showToast])
 
   const handleCreateEmployee = useCallback(async (data) => {
     try {
