@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { supabase, getSites, getEmployees, getShiftDefs, getShiftsForWeek,
          upsertShift, deleteShift, getTemplates, saveTemplate,
          getClockingsForDate, clockIn, clockOut,
-         createEmployee, deleteEmployee, createShiftDef, deleteShiftDef,
+         createEmployee, deleteEmployee, createShiftDef, deleteShiftDef, deleteTemplate,
          subscribeToShifts, subscribeToClockings } from './lib/supabase'
 import Planning from './pages/Planning'
 import Pointage from './pages/Pointage'
@@ -171,7 +171,6 @@ export default function App() {
 
   const handleDeleteTemplate = useCallback(async (id) => {
     try {
-      const { deleteTemplate } = await import('./lib/supabase')
       await deleteTemplate(id)
       setTemplates(prev => prev.filter(t => t.id !== id))
       showToast('Plan supprimé')
