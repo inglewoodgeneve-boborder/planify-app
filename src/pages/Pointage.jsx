@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react'
+import DatePicker from '../components/DatePicker'
 import { supabase } from '../lib/supabase'
 
 function fmtTime(iso) {
@@ -365,11 +366,9 @@ export default function Pointage({ site, employees, shifts, clockings: todayCloc
       {/* Date range picker */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
         <span style={{ fontSize: 12, color: 'var(--fg2)' }}>Période :</span>
-        <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
-          style={{ background: 'var(--bg3)', border: '1px solid var(--border)', color: 'var(--fg)', padding: '6px 10px', borderRadius: 7, fontSize: 12, outline: 'none', fontFamily: "'DM Sans', sans-serif" }} />
+        <DatePicker value={dateFrom} onChange={setDateFrom} compact minYear={2020} maxYear={new Date().getFullYear()} />
         <span style={{ color: 'var(--fg2)', fontSize: 12 }}>→</span>
-        <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
-          style={{ background: 'var(--bg3)', border: '1px solid var(--border)', color: 'var(--fg)', padding: '6px 10px', borderRadius: 7, fontSize: 12, outline: 'none', fontFamily: "'DM Sans', sans-serif" }} />
+        <DatePicker value={dateTo} onChange={setDateTo} compact minYear={2020} maxYear={new Date().getFullYear()} />
         {loadingRange && <span style={{ fontSize: 11, color: 'var(--fg2)' }}>Chargement…</span>}
       </div>
 

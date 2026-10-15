@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import DatePicker from '../components/DatePicker'
 import { supabase } from '../lib/supabase'
 
 const COLORS = ['#818cf8','#34d399','#f59e0b','#f87171','#38bdf8','#a78bfa','#fb923c','#4ade80','#e879f9','#94a3b8']
@@ -197,7 +198,7 @@ export default function Config({ site, employees, shiftDefs, onCreateEmployee, o
                   </div>
                   <div>
                     <label style={labelStyle}>Date de naissance</label>
-                    <input type="date" value={emp.birth_date} onChange={setF('birth_date')} style={inputStyle} />
+                    <DatePicker value={emp.birth_date} onChange={v => setEmp(p => ({...p, birth_date: v}))} minYear={1940} maxYear={new Date().getFullYear() - 14} style={{ width:'100%' }} inputStyle={{ width:'100%', boxSizing:'border-box' }} />
                   </div>
                   <div>
                     <label style={labelStyle}>N° AVS</label>
@@ -254,7 +255,7 @@ export default function Config({ site, employees, shiftDefs, onCreateEmployee, o
                   </div>
                   <div>
                     <label style={labelStyle}>Date d'entrée</label>
-                    <input type="date" value={emp.hire_date} onChange={setF('hire_date')} style={inputStyle} />
+                    <DatePicker value={emp.hire_date} onChange={v => setEmp(p => ({...p, hire_date: v}))} minYear={2000} maxYear={new Date().getFullYear() + 1} style={{ width:'100%' }} inputStyle={{ width:'100%', boxSizing:'border-box' }} />
                   </div>
                 </div>
               )}
