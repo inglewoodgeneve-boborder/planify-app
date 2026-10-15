@@ -121,8 +121,10 @@ export default function Config({ site, employees, shiftDefs, onCreateEmployee, o
       birth_date:      emp.birth_date || null,
       hire_date:       emp.hire_date || null,
       contract_type:   emp.contract_type || 'cdi',
-      hourly_rate:     emp.hourly_rate ? parseFloat(emp.hourly_rate) : null,
-      avs_number:      emp.avs_number.trim() || null,
+      hourly_rate:      emp.hourly_rate ? parseFloat(emp.hourly_rate) : null,
+      avs_number:       emp.avs_number.trim() || null,
+      weekly_hours_ref: emp.weekly_hours_ref ? parseFloat(emp.weekly_hours_ref) : null,
+      monthly_salary:   emp.monthly_salary ? parseFloat(emp.monthly_salary) : null,
     }
   }
 
