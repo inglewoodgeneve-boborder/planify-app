@@ -74,11 +74,23 @@ export default function Pointage({ site, employees, shifts, clockings, onClockIn
       {/* Employee cards */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         {filtered.map(emp => {
-          const clocking = clockings.find(c => c.employee_id === emp.id && c.work_date === today)
+          // All clockings for this employee today, sorted by clock_in
+          const empClockings = clockings
+            .filter(c => c.employee_id === emp.id && c.work_date === today)
+            .sort((a, b) => new Date(a.clock_in) - new Date(b.clock_in))
+          // Most recent clocking (open or closed)
+          const clocking = empClockings[empClockings.length - 1] || null
+          // Total duration today (sum of all completed + ongoing)
+          const now = new Date()
+          const totalMin = empClockings.reduce((acc, c) => {
+            if (c.clock_in && c.clock_out) return acc + diffMin(c.clock_in, c.clock_out)
+            if (c.clock_in && !c.clock_out) return acc + Math.round((now - new Date(c.clock_in)) / 60000)
+            return acc
+          }, 0)
           const plannedShift = todayShifts.find(s => s.employee_id === emp.id)
           const isIn  = clocking && !clocking.clock_out
           const isOut = clocking && clocking.clock_out
-          const dur   = clocking ? diffMin(clocking.clock_in, clocking.clock_out) : null
+          const dur   = empClockings.length > 0 ? totalMin : null
 
           let statusColor = 'var(--bg3)'
           let statusLabel = 'Absent'
@@ -117,21 +129,21 @@ export default function Pointage({ site, employees, shifts, clockings, onClockIn
               {/* Clock times */}
               <div style={{ display: 'flex', gap: 20, minWidth: 160 }}>
                 <div>
-                  <div style={{ fontSize: 10, color: 'var(--fg2)', marginBottom: 1 }}>Entrée</div>
-                  <div style={{ fontSize: 15, fontWeight: 600, color: isIn || isOut ? '#3fb950' : 'var(--fg2)' }}>
-                    {fmtTime(clocking?.clock_in)}
+                  <div style={{ fontSize: 10, color: 'var(--fg2)', marginBottom: 1 }}>1ère entrée</div>
+                  <div style={{ fontSize: 15, fontWeight: 600, color: empClockings.length ? '#3fb950' : 'var(--fg2)' }}>
+                    {fmtTime(empClockings[0]?.clock_in)}
                   </div>
                 </div>
                 <div>
-                  <div style={{ fontSize: 10, color: 'var(--fg2)', marginBottom: 1 }}>Sortie</div>
+                  <div style={{ fontSize: 10, color: 'var(--fg2)', marginBottom: 1 }}>Dernière sortie</div>
                   <div style={{ fontSize: 15, fontWeight: 600, color: isOut ? '#58a6ff' : 'var(--fg2)' }}>
                     {fmtTime(clocking?.clock_out)}
                   </div>
                 </div>
                 <div>
-                  <div style={{ fontSize: 10, color: 'var(--fg2)', marginBottom: 1 }}>Durée</div>
+                  <div style={{ fontSize: 10, color: 'var(--fg2)', marginBottom: 1 }}>Total</div>
                   <div style={{ fontSize: 15, fontWeight: 600 }}>
-                    {dur != null ? fmtDuration(dur) : (isIn ? <span style={{ color: '#f59e0b' }}>En cours…</span> : '—')}
+                    {dur > 0 ? fmtDuration(dur) : (isIn ? <span style={{ color: '#f59e0b' }}>En cours…</span> : '—')}
                   </div>
                 </div>
               </div>
@@ -145,7 +157,7 @@ export default function Pointage({ site, employees, shifts, clockings, onClockIn
 
               {/* Actions */}
               <div style={{ display: 'flex', gap: 8 }}>
-                {!clocking && (
+                {(!clocking || isOut) && (
                   <button
                     onClick={() => onClockIn(emp.id)}
                     style={{ background: '#166534', color: 'white', border: 'none', padding: '7px 14px', borderRadius: 7, cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: "'DM Sans', sans-serif" }}>
@@ -158,9 +170,6 @@ export default function Pointage({ site, employees, shifts, clockings, onClockIn
                     style={{ background: '#1e3a5f', color: 'white', border: 'none', padding: '7px 14px', borderRadius: 7, cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: "'DM Sans', sans-serif" }}>
                     ■ Sortie
                   </button>
-                )}
-                {isOut && (
-                  <div style={{ fontSize: 11, color: 'var(--fg2)', fontStyle: 'italic' }}>Terminé</div>
                 )}
               </div>
             </div>
