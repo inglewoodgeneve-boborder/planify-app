@@ -14,7 +14,7 @@ const CONTRACT_TYPES = [
 const EMPTY_EMP = {
   first_name: '', last_name: '', role: '', contract_pct: '100',
   email: '', phone: '',
-  address_street: '', address_zip: '', address_city: '',
+  address_street: '', address_zip: '', address_city: '', address_country: 'Suisse',
   birth_date: '', hire_date: '',
   contract_type: 'cdi', hourly_rate: '', avs_number: '',
 }
@@ -57,6 +57,7 @@ export default function Config({ site, employees, shiftDefs, onCreateEmployee, o
         address_street: emp.address_street.trim() || null,
         address_zip:    emp.address_zip.trim() || null,
         address_city:   emp.address_city.trim() || null,
+        address_country: emp.address_country.trim() || null,
         birth_date:     emp.birth_date || null,
         hire_date:      emp.hire_date || null,
         contract_type:  emp.contract_type || 'cdi',
@@ -246,6 +247,10 @@ export default function Config({ site, employees, shiftDefs, onCreateEmployee, o
                     <div>
                       <label style={lbl}>Ville</label>
                       <input value={emp.address_city} onChange={setF('address_city')} placeholder="Genève" style={inp} />
+                    </div>
+                    <div style={{ display:'grid', gridTemplateColumns:'1fr', gap:4 }}>
+                      <label style={lbl}>Pays</label>
+                      <input value={emp.address_country} onChange={setF('address_country')} placeholder="Suisse" style={inp} />
                     </div>
                   </div>
                 </div>
