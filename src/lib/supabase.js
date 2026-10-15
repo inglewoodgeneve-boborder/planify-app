@@ -104,13 +104,10 @@ export async function clockIn(employeeId, siteId, date) {
   return data
 }
 
-export async function clockOut(clockingId, clockInIso) {
+export async function clockOut(clockingId) {
   const clock_out = new Date().toISOString()
-  const duration_min = clockInIso
-    ? Math.round((new Date(clock_out) - new Date(clockInIso)) / 60000)
-    : null
   const { data, error } = await supabase
-    .from('clockings').update({ clock_out, duration_min }).eq('id', clockingId).select().single()
+    .from('clockings').update({ clock_out }).eq('id', clockingId).select().single()
   if (error) throw error
   return data
 }

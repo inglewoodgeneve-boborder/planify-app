@@ -76,10 +76,9 @@ export default function Kiosk({ siteId, siteName }) {
         })
         setSuccess({ name: emp.first_name, action: 'entrée', time: fmtTime(now.toISOString()) })
       } else {
-        // Clock-out with duration
-        const duration_min = Math.round((now - new Date(openClocking.clock_in)) / 60000)
+        // Clock-out
         await supabase.from('clockings')
-          .update({ clock_out: now.toISOString(), duration_min })
+          .update({ clock_out: now.toISOString() })
           .eq('id', openClocking.id)
         setSuccess({ name: emp.first_name, action: 'sortie', time: fmtTime(now.toISOString()) })
       }
