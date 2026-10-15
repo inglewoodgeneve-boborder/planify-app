@@ -18,7 +18,7 @@ const EMPTY_EMP = {
   email: '', phone: '',
   address_street: '', address_zip: '', address_city: '', address_country: 'Suisse',
   birth_date: '', hire_date: '',
-  contract_type: 'cdi', hourly_rate: '', avs_number: '',
+  contract_type: 'cdi', hourly_rate: '', avs_number: '', weekly_hours_ref: '42',
 }
 
 export default function Config({ site, employees, shiftDefs, onCreateEmployee, onUpdateEmployee, onDeleteEmployee, onCreateShiftDef, onDeleteShiftDef, onResetPin }) {
@@ -61,6 +61,7 @@ export default function Config({ site, employees, shiftDefs, onCreateEmployee, o
       contract_type:   employee.contract_type || 'cdi',
       hourly_rate:     employee.hourly_rate != null ? String(employee.hourly_rate) : '',
       avs_number:      employee.avs_number || '',
+      weekly_hours_ref: employee.weekly_hours_ref != null ? String(employee.weekly_hours_ref) : '42',
     })
     setEditingId(employee.id)
     setShowForm(true)
@@ -318,10 +319,38 @@ export default function Config({ site, employees, shiftDefs, onCreateEmployee, o
                         {CONTRACT_TYPES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
                       </select>
                     </div>
-                    <div>
-                      <label style={lbl}>Taux d'occupation (%)</label>
-                      <input type="number" min="10" max="100" value={emp.contract_pct} onChange={setF('contract_pct')} style={inp} />
-                    </div>
+
+                    {(emp.contract_type === 'cdi' || emp.contract_type === 'cdd') && (() => {
+                      const ref  = parseFloat(emp.weekly_hours_ref) || 0
+                      const pct  = parseFloat(emp.contract_pct) || 100
+                      const eff  = ref > 0 ? (ref * pct / 100).toFixed(2) : null
+                      return (
+                        <>
+                          <div>
+                            <label style={lbl}>Heures hebdo (100%)</label>
+                            <input type="number" step="0.5" min="1" max="84" value={emp.weekly_hours_ref} onChange={setF('weekly_hours_ref')} placeholder="42" style={inp} />
+                          </div>
+                          <div>
+                            <label style={lbl}>Taux d'occupation (%)</label>
+                            <input type="number" min="10" max="100" value={emp.contract_pct} onChange={setF('contract_pct')} style={inp} />
+                          </div>
+                          <div style={{ gridColumn: '1 / -1' }}>
+                            <label style={lbl}>Heures effectives / semaine</label>
+                            <div style={{ ...inp, background: 'var(--bg3)', color: eff ? 'var(--accent)' : 'var(--fg3)', fontFamily: "'DM Mono',monospace", fontWeight: 700, fontSize: 15 }}>
+                              {eff ? `${eff} h` : '—'}
+                            </div>
+                          </div>
+                        </>
+                      )
+                    })()}
+
+                    {(emp.contract_type === 'cdi_horaire' || emp.contract_type === 'cdd_horaire') && (
+                      <div>
+                        <label style={lbl}>Taux d'occupation (%)</label>
+                        <input type="number" min="10" max="100" value={emp.contract_pct} onChange={setF('contract_pct')} style={inp} />
+                      </div>
+                    )}
+
                     <div>
                       <label style={lbl}>Taux horaire (CHF)</label>
                       <input type="number" step="0.05" min="0" value={emp.hourly_rate} onChange={setF('hourly_rate')} placeholder="23.50" style={inp} />
