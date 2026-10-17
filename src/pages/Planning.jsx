@@ -225,23 +225,6 @@ export default function Planning({ site, employees, shiftDefs, shifts, templates
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
-      {/* Palette shifts génériques */}
-      <div style={{ background: 'var(--bg2)', borderBottom: '1px solid var(--border)', padding: '10px 20px', flexShrink: 0 }}>
-        <div style={{ fontSize: 10, fontFamily: "'Syne',sans-serif", fontWeight: 700, letterSpacing: '1.2px', textTransform: 'uppercase', color: 'var(--fg3)', marginBottom: 8 }}>
-          Shifts — glisser vers le planning
-        </div>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {shiftDefs.map(def => (
-            <div key={def.id} draggable onDragStart={e => onPaletteDragStart(e, def)}
-              style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '6px 12px 6px 8px', borderRadius: 8, cursor: 'grab', userSelect: 'none', background: def.color + '22', border: `1px solid ${def.color}55` }}>
-              <span style={{ width: 8, height: 8, borderRadius: '50%', background: def.color, flexShrink: 0, display: 'block' }} />
-              <span style={{ fontWeight: 600, fontSize: 12 }}>{def.label}</span>
-              {def.start_time && <span style={{ fontSize: 11, color: 'var(--fg2)' }}>{def.start_time.slice(0,5)}–{def.end_time.slice(0,5)}</span>}
-            </div>
-          ))}
-        </div>
-      </div>
-
       {/* Palette importée depuis template */}
       {importedPalette && (
         <div style={{ background: 'color-mix(in srgb, var(--accent) 6%, var(--bg2))', borderBottom: '1px solid var(--accent)44', padding: '10px 20px', flexShrink: 0 }}>
