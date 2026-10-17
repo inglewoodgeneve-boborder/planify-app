@@ -5,7 +5,7 @@ import { checkShift, shiftDuration, isHoliday, isSunday } from '../lib/lgav'
 const FR_DAYS   = ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim']
 const FR_MONTHS = ['jan','fév','mar','avr','mai','jun','jul','aoû','sep','oct','nov','déc']
 
-export default function Planning({ site, employees, shiftDefs, shifts, templates, weekOffset, setWeekOffset, onDropShift, onDeleteShift, onSaveTemplate, weekDates, fmtDate }) {
+export default function Planning({ site, employees, shiftDefs, shifts, templates, weekOffset, setWeekOffset, onDropShift, onDeleteShift, onSaveTemplate, onRefreshShifts, weekDates, fmtDate }) {
   const [dragSource, setDragSource]   = useState(null)
   const dragRef = useRef(null)
   const [dropTarget, setDropTarget]   = useState(null)
@@ -202,8 +202,10 @@ export default function Planning({ site, employees, shiftDefs, shifts, templates
       const { error } = await supabase.from('shifts').insert(rows)
       if (error) {
         console.error('Erreur génération shifts:', error)
+      } else {
+        // Forcer le rechargement immédiat sans attendre le realtime
+        onRefreshShifts && await onRefreshShifts()
       }
-      // Le realtime subscription dans App.jsx va recharger les shifts automatiquement
     }
 
     setGenerating(false)
