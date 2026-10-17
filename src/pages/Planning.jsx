@@ -610,6 +610,55 @@ export default function Planning({ site, employees, shiftDefs, shifts, templates
   )
 }
 
+function TimeInput({ value, onChange }) {
+  const [h, m] = (value || '00:00').split(':')
+  const mRef = useRef(null)
+
+  function onHourChange(e) {
+    let val = e.target.value.replace(/\D/g, '').slice(0, 2)
+    if (val.length === 2) {
+      const n = Math.min(23, parseInt(val, 10))
+      onChange(`${String(n).padStart(2,'0')}:${m}`)
+      mRef.current?.focus()
+      mRef.current?.select()
+    } else {
+      onChange(`${val.padStart(2,'0')}:${m}`)
+    }
+  }
+  function onMinChange(e) {
+    let val = e.target.value.replace(/\D/g, '').slice(0, 2)
+    const n = Math.min(59, parseInt(val || '0', 10))
+    onChange(`${h}:${String(n).padStart(2,'0')}`)
+  }
+
+  const fieldStyle = {
+    width: 44, textAlign: 'center', background: 'var(--bg)', border: '1px solid var(--border)',
+    color: 'var(--fg)', padding: '8px 4px', borderRadius: 8, fontSize: 16, fontFamily: "'DM Mono',monospace",
+    fontWeight: 600, outline: 'none', boxSizing: 'border-box',
+  }
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+      <input
+        type="text" inputMode="numeric" maxLength={2}
+        value={h} onChange={onHourChange}
+        onClick={e => e.target.select()}
+        placeholder="HH"
+        style={fieldStyle}
+      />
+      <span style={{ fontSize: 18, fontWeight: 700, color: 'var(--fg2)' }}>:</span>
+      <input
+        ref={mRef}
+        type="text" inputMode="numeric" maxLength={2}
+        value={m} onChange={onMinChange}
+        onClick={e => e.target.select()}
+        placeholder="MM"
+        style={fieldStyle}
+      />
+    </div>
+  )
+}
+
 function UnassignedChip({ shift, onDelete, onDragStart }) {
   const def   = shift.shift_defs || {}
   const color = def.color || '#818cf8'
