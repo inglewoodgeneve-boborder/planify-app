@@ -1,4 +1,5 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
+import { supabase } from '../lib/supabase'
 import { checkShift, shiftDuration, isHoliday, isSunday } from '../lib/lgav'
 
 const FR_DAYS   = ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim']
@@ -8,22 +9,35 @@ export default function Planning({ site, employees, shiftDefs, shifts, templates
   const [dragSource, setDragSource]   = useState(null)
   const dragRef = useRef(null)
   const [dropTarget, setDropTarget]   = useState(null)
-  const [modal, setModal]             = useState(null)   // { empId, date }
+  const [modal, setModal]             = useState(null)
   const [modalLabel, setModalLabel]   = useState('')
   const [modalStart, setModalStart]   = useState('08:00')
   const [modalEnd, setModalEnd]       = useState('16:00')
 
-  // Palette import depuis template
-  const [importedPalette, setImportedPalette] = useState(null) // null | { tplId, tplName, slots }
+  // Palette import depuis template (ancienne logique conservée)
+  const [importedPalette, setImportedPalette] = useState(null)
 
-  // Sauvegarder semaine courante comme plan de travail
+  // Sauver semaine comme plan de travail
   const [saveModal, setSaveModal]     = useState(false)
   const [saveName, setSaveName]       = useState('')
+
+  // ── Nouveaux plans de travail (work_plans) ────────────────────
+  const [workPlans, setWorkPlans]       = useState([])
+  const [generateModal, setGenerateModal] = useState(null) // { plan, planShifts }
+  const [generating, setGenerating]     = useState(false)
+
+  useEffect(() => {
+    supabase
+      .from('work_plans')
+      .select('*')
+      .order('created_at')
+      .then(({ data }) => setWorkPlans(data || []))
+  }, [])
 
   const dates = weekDates(weekOffset)
   const today = fmtDate(new Date())
 
-  // ── Helpers ────────────────────────────────────────────────
+  // ── Helpers ────────────────────────────────────────────────────
   function getShifts(empId, dateStr) {
     return shifts.filter(s => s.employee_id === empId && s.work_date === dateStr)
   }
@@ -48,7 +62,7 @@ export default function Planning({ site, employees, shiftDefs, shifts, templates
     return Math.ceil(((d - jan4) / 86400000 + jan4.getDay() + 1) / 7)
   }
 
-  // ── Drag & Drop ────────────────────────────────────────────
+  // ── Drag & Drop ────────────────────────────────────────────────
   function onPaletteDragStart(e, def) {
     const src = { type: 'palette', def }
     setDragSource(src); dragRef.current = src
@@ -78,7 +92,6 @@ export default function Planning({ site, employees, shiftDefs, shifts, templates
     setDropTarget(null)
     const src = dragRef.current
     if (!src) return
-
     if (src.type === 'palette' || src.type === 'imported') {
       const def = src.def
       await onDropShift({ employeeId: empId, workDate: dateStr, shiftDefId: def.id, startTime: def.start_time, endTime: def.end_time })
@@ -101,7 +114,6 @@ export default function Planning({ site, employees, shiftDefs, shifts, templates
     const src = dragRef.current
     if (!src) return
     if (src.type === 'assigned' && src.shift.employee_id) {
-      // move assigned shift back to unassigned pool
       await onDeleteShift(src.shift.id)
       await onDropShift({ employeeId: null, workDate: dateStr, shiftDefId: src.shift.shift_def_id, startTime: src.shift.start_time, endTime: src.shift.end_time })
     } else if (src.type === 'palette' || src.type === 'imported') {
@@ -112,12 +124,10 @@ export default function Planning({ site, employees, shiftDefs, shifts, templates
     setDragSource(null)
   }
 
-  // ── Modal ajout shift ──────────────────────────────────────
+  // ── Modal ajout shift ──────────────────────────────────────────
   function openModal(empId, date) {
     setModal({ empId, date })
-    setModalLabel('')
-    setModalStart('08:00')
-    setModalEnd('16:00')
+    setModalLabel(''); setModalStart('08:00'); setModalEnd('16:00')
   }
   function pickShiftDef(def) {
     setModalLabel(def.label)
@@ -126,26 +136,19 @@ export default function Planning({ site, employees, shiftDefs, shifts, templates
   async function confirmModal() {
     if (!modal || !modalLabel.trim()) return
     const matchedDef = shiftDefs.find(d => d.label === modalLabel.trim())
-    await onDropShift({
-      employeeId: modal.empId, workDate: modal.date,
-      shiftDefId: matchedDef?.id || null,
-      startTime: modalStart, endTime: modalEnd,
-    })
+    await onDropShift({ employeeId: modal.empId, workDate: modal.date, shiftDefId: matchedDef?.id || null, startTime: modalStart, endTime: modalEnd })
     setModal(null)
   }
 
-  // ── Import template dans palette ───────────────────────────
+  // ── Import template dans palette (ancienne logique) ────────────
   function importTpl(tpl) {
     const slots = (tpl.week_template_slots || []).map((s, i) => ({ ...s, slotKey: `${s.day_index}_${s.shift_def_id}_${i}` }))
     setImportedPalette({ tplId: tpl.id, tplName: tpl.name, slots })
   }
   function clearImport() { setImportedPalette(null) }
 
-  // ── Sauver semaine courante comme plan de travail ──────────
-  function openSaveModal() {
-    setSaveName('')
-    setSaveModal(true)
-  }
+  // ── Sauver semaine courante comme plan de travail ──────────────
+  function openSaveModal() { setSaveName(''); setSaveModal(true) }
   async function confirmSave() {
     if (!saveName.trim()) return
     const slots = []
@@ -157,6 +160,64 @@ export default function Planning({ site, employees, shiftDefs, shifts, templates
     })
     await onSaveTemplate(saveName.trim(), slots)
     setSaveModal(false)
+  }
+
+  // ── Générer une semaine depuis un work_plan ────────────────────
+  async function openGenerateModal(plan) {
+    const { data: planShifts } = await supabase
+      .from('work_plan_shifts')
+      .select('*, shift_defs(*)')
+      .eq('work_plan_id', plan.id)
+      .order('day_of_week')
+    setGenerateModal({ plan, planShifts: planShifts || [] })
+  }
+
+  async function confirmGenerate() {
+    if (!generateModal) return
+    setGenerating(true)
+    const { plan, planShifts } = generateModal
+
+    // Construire tous les rows en une fois (évite l'écrasement local de handleDropShift)
+    const rows = []
+    for (const ps of planShifts) {
+      const def = ps.shift_defs
+      if (!def) continue
+      const date = dates[ps.day_of_week]
+      if (!date) continue
+      const dateStr = fmtDate(date)
+      for (let i = 0; i < ps.quantity; i++) {
+        rows.push({
+          site_id: site?.id || null,
+          employee_id: null,
+          shift_def_id: def.id,
+          work_date: dateStr,
+          start_time: def.start_time || null,
+          end_time: def.end_time || null,
+          status: 'draft',
+        })
+      }
+    }
+
+    if (rows.length > 0) {
+      const { error } = await supabase.from('shifts').insert(rows)
+      if (error) {
+        console.error('Erreur génération shifts:', error)
+      }
+      // Le realtime subscription dans App.jsx va recharger les shifts automatiquement
+    }
+
+    setGenerating(false)
+    setGenerateModal(null)
+  }
+
+  // Résumé par jour pour le modal de confirmation
+  function generateSummary(planShifts) {
+    const byDay = {}
+    for (const ps of planShifts) {
+      if (!byDay[ps.day_of_week]) byDay[ps.day_of_week] = []
+      byDay[ps.day_of_week].push(ps)
+    }
+    return byDay
   }
 
   const modalViolations = modal ? checkShift({ startTime: modalStart, endTime: modalEnd, workDate: modal.date }) : []
@@ -302,7 +363,6 @@ export default function Planning({ site, employees, shiftDefs, shifts, templates
                   <div style={{ fontSize: 11, color: 'var(--fg2)', marginTop: 1 }}>{emp.role}</div>
                   <div style={{ fontSize: 10, color: 'var(--fg3)', marginTop: 2 }}>{emp.contract_pct}%</div>
                 </div>
-
                 {dates.map((d, di) => {
                   const ds     = fmtDate(d)
                   const dayShifts = getShifts(emp.id, ds)
@@ -333,7 +393,6 @@ export default function Planning({ site, employees, shiftDefs, shifts, templates
                     </div>
                   )
                 })}
-
                 <div style={{ borderLeft: '1px solid var(--border2)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 4 }}>
                   <div style={{ fontFamily: "'Syne',sans-serif", fontSize: 15, fontWeight: 700, color: wh > 45 ? '#f85149' : wh > 40 ? '#f59e0b' : wh > 0 ? '#3fb950' : 'var(--fg3)' }}>
                     {wh > 0 ? `${wh.toFixed(0)}h` : '–'}
@@ -346,20 +405,118 @@ export default function Planning({ site, employees, shiftDefs, shifts, templates
         </div>
       </div>
 
-      {/* Templates bar */}
-      <div style={{ background: 'var(--bg2)', borderTop: '1px solid var(--border)', padding: '8px 20px', display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0, flexWrap: 'wrap' }}>
-        <div style={{ fontSize: 10, fontFamily: "'Syne',sans-serif", fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--fg3)', whiteSpace: 'nowrap' }}>Plans de travail</div>
-        {templates.map(tpl => (
-          <button key={tpl.id} onClick={() => importTpl(tpl)}
-            style={{ fontSize: 11, fontWeight: 600, padding: '4px 10px', borderRadius: 6, border: `1px solid ${importedPalette?.tplId === tpl.id ? 'var(--accent)' : 'var(--border)'}`, background: importedPalette?.tplId === tpl.id ? 'var(--accent-dim)' : 'var(--bg3)', color: importedPalette?.tplId === tpl.id ? 'var(--accent)' : 'var(--fg2)', cursor: 'pointer' }}>
-            {tpl.name}
+      {/* ── Barre plans de travail ── */}
+      <div style={{ background: 'var(--bg2)', borderTop: '1px solid var(--border)', padding: '8px 20px', display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, flexWrap: 'wrap' }}>
+        <div style={{ fontSize: 10, fontFamily: "'Syne',sans-serif", fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--fg3)', whiteSpace: 'nowrap', marginRight: 4 }}>
+          Plans de travail
+        </div>
+
+        {workPlans.length === 0 && (
+          <span style={{ fontSize: 11, color: 'var(--fg3)', fontStyle: 'italic' }}>Aucun plan — crée-en un dans Config</span>
+        )}
+
+        {workPlans.map(plan => (
+          <button
+            key={plan.id}
+            onClick={() => openGenerateModal(plan)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              fontSize: 11, fontWeight: 600, padding: '5px 12px', borderRadius: 7,
+              border: '1px solid var(--border)',
+              background: 'var(--bg3)', color: 'var(--fg2)',
+              cursor: 'pointer', whiteSpace: 'nowrap',
+              transition: 'all .15s',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'var(--accent-dim)'; e.currentTarget.style.color = 'var(--accent)'; e.currentTarget.style.borderColor = 'var(--accent)44' }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'var(--bg3)'; e.currentTarget.style.color = 'var(--fg2)'; e.currentTarget.style.borderColor = 'var(--border)' }}
+          >
+            ⚡ {plan.name}
           </button>
         ))}
+
         <button onClick={openSaveModal}
           style={{ fontSize: 11, fontWeight: 600, padding: '5px 12px', borderRadius: 7, border: '1px dashed var(--border)', background: 'none', color: 'var(--fg3)', cursor: 'pointer', whiteSpace: 'nowrap', marginLeft: 'auto' }}>
           💾 Sauver cette semaine comme plan
         </button>
       </div>
+
+      {/* ── Modal confirmation génération ── */}
+      {generateModal && (
+        <div onClick={e => e.target === e.currentTarget && !generating && setGenerateModal(null)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.65)', backdropFilter: 'blur(4px)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 14, padding: 24, minWidth: 380, maxWidth: 500, width: '90%', boxShadow: '0 24px 64px rgba(0,0,0,.5)' }}>
+            <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 16, marginBottom: 4 }}>
+              ⚡ Générer depuis "{generateModal.plan.name}"
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--fg2)', marginBottom: 18 }}>
+              Les shifts seront créés non-assignés (📥 À donner) pour la semaine {getISOWeek(dates[0])}.
+            </div>
+
+            {/* Résumé par jour */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 20 }}>
+              {generateModal.planShifts.length === 0 ? (
+                <div style={{ fontSize: 13, color: 'var(--fg3)', textAlign: 'center', padding: 12 }}>
+                  Ce plan est vide — ajoute des shifts dans Config.
+                </div>
+              ) : (() => {
+                const byDay = generateSummary(generateModal.planShifts)
+                return FR_DAYS.map((jour, di) => {
+                  const dayPs = byDay[di]
+                  if (!dayPs?.length) return null
+                  const date = dates[di]
+                  return (
+                    <div key={di} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: 'var(--bg3)', borderRadius: 8 }}>
+                      <span style={{ fontSize: 12, fontWeight: 700, width: 36, color: 'var(--fg2)', fontFamily: "'Syne',sans-serif" }}>{jour}</span>
+                      <span style={{ fontSize: 11, color: 'var(--fg3)', width: 52 }}>
+                        {date.getDate()} {FR_MONTHS[date.getMonth()]}
+                      </span>
+                      <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', flex: 1 }}>
+                        {dayPs.map(ps => {
+                          const def = ps.shift_defs
+                          if (!def) return null
+                          return (
+                            <span key={ps.id} style={{
+                              display: 'inline-flex', alignItems: 'center', gap: 4,
+                              padding: '2px 8px', borderRadius: 6, fontSize: 11, fontWeight: 600,
+                              background: def.color + '22', border: `1px solid ${def.color}44`, color: def.color,
+                            }}>
+                              {ps.quantity > 1 && <span style={{ fontFamily: "'DM Mono',monospace" }}>{ps.quantity}×</span>}
+                              {def.label}
+                            </span>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )
+                })
+              })()}
+            </div>
+
+            {generateModal.planShifts.length > 0 && (
+              <div style={{ fontSize: 11, color: 'var(--fg3)', marginBottom: 18, padding: '8px 12px', background: 'color-mix(in srgb, #f59e0b 8%, var(--bg))', border: '1px solid #f59e0b44', borderRadius: 8 }}>
+                ⚠️ Les shifts existants non-assignés de cette semaine ne seront pas supprimés.
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button onClick={() => setGenerateModal(null)} disabled={generating}
+                style={{ background: 'none', border: '1px solid var(--border)', color: 'var(--fg2)', padding: '7px 16px', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>
+                Annuler
+              </button>
+              <button onClick={confirmGenerate} disabled={generating || generateModal.planShifts.length === 0}
+                style={{
+                  background: generating || generateModal.planShifts.length === 0 ? 'var(--bg3)' : 'var(--accent)',
+                  border: 'none', color: generating || generateModal.planShifts.length === 0 ? 'var(--fg3)' : '#fff',
+                  padding: '7px 20px', borderRadius: 8,
+                  cursor: generating || generateModal.planShifts.length === 0 ? 'not-allowed' : 'pointer',
+                  fontSize: 13, fontWeight: 600,
+                }}>
+                {generating ? '⏳ Génération…' : '⚡ Générer les shifts'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal ajout shift */}
       {modal && (
@@ -434,14 +591,9 @@ export default function Planning({ site, employees, shiftDefs, shifts, templates
               Les shifts de la semaine {getISOWeek(dates[0])} seront sauvegardés comme modèle réutilisable.
             </div>
             <label style={{ fontSize: 11, color: 'var(--fg2)', fontWeight: 600, display: 'block', marginBottom: 5 }}>Nom du plan</label>
-            <input
-              autoFocus
-              placeholder="Ex: Hiver, Été, Weekend chargé..."
-              value={saveName}
-              onChange={e => setSaveName(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && confirmSave()}
-              style={{ ...inputStyle, marginBottom: 20 }}
-            />
+            <input autoFocus placeholder="Ex: Hiver, Été, Weekend chargé..." value={saveName}
+              onChange={e => setSaveName(e.target.value)} onKeyDown={e => e.key === 'Enter' && confirmSave()}
+              style={{ ...inputStyle, marginBottom: 20 }} />
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
               <button onClick={() => setSaveModal(false)} style={{ background: 'none', border: '1px solid var(--border)', color: 'var(--fg2)', padding: '7px 16px', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>Annuler</button>
               <button onClick={confirmSave} disabled={!saveName.trim()}
