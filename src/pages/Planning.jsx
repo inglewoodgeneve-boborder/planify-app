@@ -133,6 +133,23 @@ export default function Planning({ site, employees, shiftDefs, shifts, templates
     setModalLabel(def.label)
     if (def.start_time) { setModalStart(def.start_time.slice(0,5)); setModalEnd(def.end_time.slice(0,5)) }
   }
+
+  function timeToMins(t) {
+    const [h, m] = t.split(':').map(Number)
+    return h * 60 + m
+  }
+  function minsToTime(m) {
+    const total = ((m % 1440) + 1440) % 1440
+    return `${String(Math.floor(total / 60)).padStart(2,'0')}:${String(total % 60).padStart(2,'0')}`
+  }
+  function handleModalStartChange(newStart) {
+    const oldStartMins = timeToMins(modalStart)
+    const oldEndMins   = timeToMins(modalEnd)
+    const duration     = ((oldEndMins - oldStartMins) + 1440) % 1440
+    const newStartMins = timeToMins(newStart)
+    setModalStart(newStart)
+    setModalEnd(minsToTime(newStartMins + duration))
+  }
   async function confirmModal() {
     if (!modal || !modalLabel.trim()) return
     const matchedDef = shiftDefs.find(d => d.label === modalLabel.trim())
@@ -539,11 +556,11 @@ export default function Planning({ site, employees, shiftDefs, shifts, templates
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
               <div>
                 <label style={{ fontSize: 11, color: 'var(--fg2)', fontWeight: 600, display: 'block', marginBottom: 5 }}>Début</label>
-                <input type="time" value={modalStart} onChange={e => setModalStart(e.target.value)} style={inputStyle} />
+                <TimeInput value={modalStart} onChange={handleModalStartChange} />
               </div>
               <div>
                 <label style={{ fontSize: 11, color: 'var(--fg2)', fontWeight: 600, display: 'block', marginBottom: 5 }}>Fin</label>
-                <input type="time" value={modalEnd} onChange={e => setModalEnd(e.target.value)} style={inputStyle} />
+                <TimeInput value={modalEnd} onChange={setModalEnd} />
               </div>
             </div>
             {modalViolations.length > 0 && (
