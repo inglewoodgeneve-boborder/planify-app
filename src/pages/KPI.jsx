@@ -62,7 +62,6 @@ export default function KPI({ site, employees }) {
       setEntries(map)
       setKpiShifts(shiftData || [])
       setLoading(false)
-      console.log('[KPI] month:', dateFrom, '→', dateTo, '| shifts:', (shiftData||[]).map(s=>s.work_date+' emp:'+s.employee_id))
     })
   }, [site?.id, dateFrom, dateTo])
 
