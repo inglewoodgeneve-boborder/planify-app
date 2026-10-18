@@ -46,6 +46,7 @@ export default function App() {
   const [toast, setToast]           = useState(null)
   const [periods, setPeriods]         = useState([])
   const [activePeriod, setActivePeriod] = useState(() => { try { const s = localStorage.getItem('pfy_activePeriod'); if (s) return JSON.parse(s) } catch {} return null })
+  const [shiftsRefreshKey, setShiftsRefreshKey] = useState(0)
 
   function getMonday(offset = 0) {
     const d = new Date()
@@ -186,7 +187,6 @@ export default function App() {
     catch (err) { showToast('Erreur : ' + err.message, 'error') }
   }, [showToast])
 
-  const [shiftsRefreshKey, setShiftsRefreshKey] = useState(0)
   const handleRefreshShifts = useCallback(() => {
     setShiftsRefreshKey(k => k + 1)
   }, [])
