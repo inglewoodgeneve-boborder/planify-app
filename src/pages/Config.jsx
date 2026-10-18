@@ -56,6 +56,108 @@ function ContratFixeFields({ emp, setF }) {
   )
 }
 
+
+// ── EmployeeRates : taux horaires par type de shift ──────────────────────────
+function EmployeeRates({ employeeId, shiftDefs }) {
+  const [rates, setRates]     = useState([])
+  const [loading, setLoading] = useState(true)
+  const [newDef, setNewDef]   = useState('')
+  const [newRate, setNewRate] = useState('')
+  const [saving, setSaving]   = useState(false)
+
+  useEffect(() => {
+    if (!employeeId) { setRates([]); setLoading(false); return }
+    supabase.from('employee_rates')
+      .select('*')
+      .eq('employee_id', employeeId)
+      .then(({ data }) => { setRates(data || []); setLoading(false) })
+  }, [employeeId])
+
+  const available = shiftDefs.filter(d => !rates.find(r => r.shift_def_id === d.id))
+
+  async function addRate(e) {
+    e.preventDefault()
+    if (!newDef || !newRate) return
+    setSaving(true)
+    const { data, error } = await supabase.from('employee_rates').insert({
+      employee_id: employeeId,
+      shift_def_id: newDef,
+      hourly_rate: parseFloat(newRate),
+    }).select().single()
+    if (!error && data) { setRates(r => [...r, data]); setNewDef(''); setNewRate('') }
+    setSaving(false)
+  }
+
+  async function removeRate(id) {
+    await supabase.from('employee_rates').delete().eq('id', id)
+    setRates(r => r.filter(x => x.id !== id))
+  }
+
+  async function updateRate(id, value) {
+    const v = parseFloat(value)
+    if (isNaN(v)) return
+    await supabase.from('employee_rates').update({ hourly_rate: v }).eq('id', id)
+    setRates(r => r.map(x => x.id === id ? { ...x, hourly_rate: v } : x))
+  }
+
+  if (loading) return <div style={{ fontSize: 12, color: 'var(--fg3)', gridColumn: '1 / -1' }}>Chargement…</div>
+
+  return (
+    <div style={{ gridColumn: '1 / -1' }}>
+      <label style={lbl}>Taux horaires par type de shift</label>
+      <div style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
+        {rates.length === 0 && (
+          <div style={{ padding: '10px 14px', fontSize: 12, color: 'var(--fg3)' }}>
+            Aucun taux spécifique — le taux de base s'applique à tous les shifts
+          </div>
+        )}
+        {rates.map(rate => {
+          const def = shiftDefs.find(d => d.id === rate.shift_def_id)
+          if (!def) return null
+          return (
+            <div key={rate.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderBottom: '1px solid var(--border)' }}>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: def.color, flexShrink: 0 }} />
+              <span style={{ flex: 1, fontSize: 13, fontWeight: 600 }}>{def.label}</span>
+              <span style={{ fontSize: 11, color: 'var(--fg3)' }}>{def.start_time?.slice(0,5)}–{def.end_time?.slice(0,5)}</span>
+              <input
+                type="number" step="0.05" min="0"
+                defaultValue={rate.hourly_rate}
+                onBlur={e => updateRate(rate.id, e.target.value)}
+                style={{ ...inp, width: 90, padding: '4px 8px', fontFamily: "'DM Mono',monospace", fontWeight: 700 }}
+              />
+              <span style={{ fontSize: 11, color: 'var(--fg3)' }}>CHF/h</span>
+              <button onClick={() => removeRate(rate.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--fg3)', fontSize: 16, lineHeight: 1, padding: '0 4px' }}>×</button>
+            </div>
+          )
+        })}
+        {available.length > 0 && (
+          <form onSubmit={addRate} style={{ display: 'flex', gap: 8, padding: '10px 12px', background: 'var(--bg2)', alignItems: 'center' }}>
+            <select value={newDef} onChange={e => setNewDef(e.target.value)} style={{ ...inp, flex: 1, padding: '6px 8px' }}>
+              <option value="">— Choisir un type de shift</option>
+              {available.map(d => (
+                <option key={d.id} value={d.id}>{d.label} ({d.start_time?.slice(0,5)}–{d.end_time?.slice(0,5)})</option>
+              ))}
+            </select>
+            <input
+              type="number" step="0.05" min="0"
+              value={newRate} onChange={e => setNewRate(e.target.value)}
+              placeholder="CHF/h"
+              style={{ ...inp, width: 90, padding: '6px 8px', fontFamily: "'DM Mono',monospace" }}
+            />
+            <button type="submit" disabled={!newDef || !newRate || saving}
+              style={newDef && newRate && !saving ? { ...btnPrimary, padding: '6px 14px' } : { ...btnDisabled, padding: '6px 14px' }}>
+              + Ajouter
+            </button>
+          </form>
+        )}
+      </div>
+      <div style={{ fontSize: 11, color: 'var(--fg3)', marginTop: 6 }}>
+        💡 Ces taux remplacent le taux de base pour le calcul des staff costs par shift
+      </div>
+    </div>
+  )
+}
+
 // ── DayRow ───────────────────────────────────────────────────────────────────
 function DayRow({ dayIndex, jour, dayShifts, shiftDefs, onAdd, onRemove, onUpdateQty, onCopyToAll, onCopyTo }) {
   const [showAddMenu, setShowAddMenu]   = useState(false)
@@ -670,6 +772,17 @@ export default function Config({ site, employees, shiftDefs, onCreateEmployee, o
                       <label style={lbl}>Date d'entrée</label>
                       <DatePicker value={emp.hire_date} onChange={setD('hire_date')} minYear={2000} maxYear={new Date().getFullYear() + 1} style={{ width: '100%' }} inputStyle={{ width: '100%', boxSizing: 'border-box' }} />
                     </div>
+
+                    {/* Taux par rôle */}
+                    {editingId ? (
+                      <EmployeeRates employeeId={editingId} shiftDefs={shiftDefs} />
+                    ) : (
+                      <div style={{ gridColumn: '1 / -1' }}>
+                        <div style={{ fontSize: 12, color: 'var(--fg3)', background: 'var(--bg3)', padding: '10px 14px', borderRadius: 8, border: '1px solid var(--border)' }}>
+                          💡 Les taux horaires par type de shift seront disponibles après la création de l'employé
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
