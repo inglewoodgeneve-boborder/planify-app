@@ -28,7 +28,7 @@ function flatNav(nav) {
 }
 
 export default function App() {
-  const [view, setView]             = useState('planning')
+  const [view, setView]             = useState(() => localStorage.getItem('pfy_view') || 'planning')
   const [sidebarOpen, setSidebar]   = useState(true)
   const [tempsOpen, setTempsOpen]   = useState(false)
   const [sites, setSites]           = useState([])
@@ -39,13 +39,13 @@ export default function App() {
   const [shifts, setShifts]         = useState([])
   const [templates, setTemplates]   = useState([])
   const [clockings, setClockings]   = useState([])
-  const [weekOffset, setWeekOffset] = useState(0)
-  const [viewMode, setViewMode]       = useState('week') // 'week' | 'month'
-  const [monthYear, setMonthYear]     = useState(() => { const n = new Date(); return { year: n.getFullYear(), month: n.getMonth() } })
+  const [weekOffset, setWeekOffset] = useState(() => parseInt(localStorage.getItem('pfy_weekOffset') || '0', 10))
+  const [viewMode, setViewMode]       = useState(() => localStorage.getItem('pfy_viewMode') || 'week')
+  const [monthYear, setMonthYear]     = useState(() => { try { const s = localStorage.getItem('pfy_monthYear'); if (s) return JSON.parse(s) } catch {} const n = new Date(); return { year: n.getFullYear(), month: n.getMonth() } })
   const [loading, setLoading]       = useState(true)
   const [toast, setToast]           = useState(null)
   const [periods, setPeriods]         = useState([])
-  const [activePeriod, setActivePeriod] = useState(null) // { id, name, date_from, date_to }
+  const [activePeriod, setActivePeriod] = useState(() => { try { const s = localStorage.getItem('pfy_activePeriod'); if (s) return JSON.parse(s) } catch {} return null })
 
   function getMonday(offset = 0) {
     const d = new Date()
@@ -131,6 +131,8 @@ export default function App() {
       setEmployees(emps); setShiftDefs(defs); setPositions(pos)
       setShifts(sh); setTemplates(tpls); setClockings(clk)
       setPeriods(pers); setLoading(false)
+      // Validate restored activePeriod still exists
+      setActivePeriod(prev => prev ? (pers.find(p => p.id === prev.id) || null) : null)
     }).catch(err => { console.error(err); setLoading(false) })
   }, [siteId, weekOffset, viewMode, monthYear])
 
@@ -197,6 +199,16 @@ export default function App() {
       getShiftsForWeek(siteId, activePeriod.date_from, activePeriod.date_to).then(setShifts).catch(console.error)
     }
   }, [siteId, activePeriod])
+
+  // Persist navigation state to localStorage
+  useEffect(() => { localStorage.setItem('pfy_view', view) }, [view])
+  useEffect(() => { localStorage.setItem('pfy_weekOffset', String(weekOffset)) }, [weekOffset])
+  useEffect(() => { localStorage.setItem('pfy_viewMode', viewMode) }, [viewMode])
+  useEffect(() => { localStorage.setItem('pfy_monthYear', JSON.stringify(monthYear)) }, [monthYear])
+  useEffect(() => {
+    if (activePeriod) localStorage.setItem('pfy_activePeriod', JSON.stringify(activePeriod))
+    else localStorage.removeItem('pfy_activePeriod')
+  }, [activePeriod])
 
   const handleSaveTemplate = useCallback(async (name, slotsArray) => {
     try {
