@@ -194,7 +194,8 @@ export default function App() {
       }
       const saved = await upsertShift(payload)
       setShifts(prev => {
-        const filtered = prev.filter(s => !(s.employee_id === employeeId && s.work_date === workDate))
+        // Remove only the dragged shift (by id), not all shifts on that cell
+        const filtered = existingId ? prev.filter(s => s.id !== existingId) : prev
         return [...filtered, { ...saved, employees: employees.find(e => e.id === employeeId), shift_defs: shiftDefs.find(d => d.id === shiftDefId) }]
       })
       showToast('Shift ajouté ✓')
