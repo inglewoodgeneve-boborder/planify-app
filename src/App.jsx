@@ -42,6 +42,8 @@ export default function App() {
   const [monthYear, setMonthYear]     = useState(() => { const n = new Date(); return { year: n.getFullYear(), month: n.getMonth() } })
   const [loading, setLoading]       = useState(true)
   const [toast, setToast]           = useState(null)
+  const [periods, setPeriods]         = useState([])
+  const [activePeriod, setActivePeriod] = useState(null) // { id, name, date_from, date_to }
 
   function getMonday(offset = 0) {
     const d = new Date()
@@ -122,9 +124,11 @@ export default function App() {
       getShiftsForWeek(siteId, from, to),
       getTemplates(siteId),
       getClockingsForDate(siteId, today),
-    ]).then(([emps, defs, pos, sh, tpls, clk]) => {
+      supabase.from('planning_periods').select('*').eq('site_id', siteId).order('date_from').then(r => r.data || []),
+    ]).then(([emps, defs, pos, sh, tpls, clk, pers]) => {
       setEmployees(emps); setShiftDefs(defs); setPositions(pos)
-      setShifts(sh); setTemplates(tpls); setClockings(clk); setLoading(false)
+      setShifts(sh); setTemplates(tpls); setClockings(clk)
+      setPeriods(pers); setLoading(false)
     }).catch(err => { console.error(err); setLoading(false) })
   }, [siteId, weekOffset, viewMode, monthYear])
 
@@ -363,6 +367,19 @@ export default function App() {
                   viewMode={viewMode} setViewMode={setViewMode}
                   monthYear={monthYear} setMonthYear={setMonthYear}
                   monthWeekDates={monthWeekDates}
+                  periods={periods} activePeriod={activePeriod}
+                  setActivePeriod={setActivePeriod}
+                  onCreatePeriod={async (data) => {
+                    const { data: p } = await supabase.from('planning_periods').insert({ ...data, site_id: siteId }).select().single()
+                    if (p) { setPeriods(prev => [...prev, p].sort((a,b) => a.date_from.localeCompare(b.date_from))) }
+                    return p
+                  }}
+                  onDeletePeriod={async (id) => {
+                    if (!confirm('Supprimer cette période ?')) return
+                    await supabase.from('planning_periods').delete().eq('id', id)
+                    setPeriods(prev => prev.filter(p => p.id !== id))
+                    if (activePeriod?.id === id) setActivePeriod(null)
+                  }}
                   onDropShift={handleDropShift} onDeleteShift={handleDeleteShift}
                   onSaveTemplate={handleSaveTemplate}
                   onRefreshShifts={handleRefreshShifts}
@@ -404,8 +421,7 @@ export default function App() {
                     setShiftDefs(prev => prev.filter(x => x.id !== id))
                   }}
                   onCreatePosition={async (data) => {
-                    const { data: p, error: pe } = await supabase.from('positions').insert({ ...data, site_id: siteId }).select().single()
-                    console.log('CREATE POSITION', { data, siteId, p, pe })
+                    const { data: p } = await supabase.from('positions').insert({ ...data, site_id: siteId }).select().single()
                     if (p) setPositions(prev => [...prev, p])
                   }}
                   onDeletePosition={async (id) => {

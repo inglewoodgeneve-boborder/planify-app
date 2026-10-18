@@ -6,7 +6,7 @@ const FR_DAYS   = ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim']
 const FR_MONTHS      = ['jan','fév','mar','avr','mai','jun','jul','aoû','sep','oct','nov','déc']
 const FR_MONTHS_LONG = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre']
 
-export default function Planning({ site, employees, shiftDefs, shifts, templates, weekOffset, setWeekOffset, viewMode, setViewMode, monthYear, setMonthYear, monthWeekDates, onDropShift, onDeleteShift, onSaveTemplate, onRefreshShifts, weekDates, fmtDate }) {
+export default function Planning({ site, employees, shiftDefs, shifts, templates, weekOffset, setWeekOffset, viewMode, setViewMode, monthYear, setMonthYear, monthWeekDates, periods, activePeriod, setActivePeriod, onCreatePeriod, onDeletePeriod, onDropShift, onDeleteShift, onSaveTemplate, onRefreshShifts, weekDates, fmtDate }) {
   const [dragSource, setDragSource]   = useState(null)
   const dragRef = useRef(null)
   const [dropTarget, setDropTarget]   = useState(null)
@@ -24,6 +24,12 @@ export default function Planning({ site, employees, shiftDefs, shifts, templates
 
   // ── Nouveaux plans de travail (work_plans) ────────────────────
   const [workPlans, setWorkPlans]       = useState([])
+
+  // ── Période modal ──────────────────────────────────────────────
+  const [periodModal, setPeriodModal]   = useState(false)
+  const [pName, setPName]               = useState('')
+  const [pFrom, setPFrom]               = useState('')
+  const [pTo, setPTo]                   = useState('')
   const [generateModal, setGenerateModal] = useState(null) // { plan, planShifts }
   const [generating, setGenerating]     = useState(false)
 
@@ -242,6 +248,108 @@ export default function Planning({ site, employees, shiftDefs, shifts, templates
 
   const modalViolations = modal ? checkShift({ startTime: modalStart, endTime: modalEnd, workDate: modal.date }) : []
 
+  const FR_MONTHS_FR = ['jan','fév','mar','avr','mai','jun','jul','aoû','sep','oct','nov','déc']
+
+  async function confirmCreatePeriod() {
+    if (!pName.trim() || !pFrom || !pTo) return
+    const p = await onCreatePeriod({ name: pName.trim(), date_from: pFrom, date_to: pTo })
+    if (p) { setActivePeriod(p); setPeriodModal(false) }
+  }
+
+  // ── Period home screen ─────────────────────────────────────────
+  if (!activePeriod) {
+    return (
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        {/* Header */}
+        <div style={{ padding: '24px 32px 16px', borderBottom: '1px solid var(--border2)', flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div>
+              <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 22 }}>Planning</div>
+              <div style={{ fontSize: 13, color: 'var(--fg2)', marginTop: 4 }}>Sélectionne une période pour commencer à planifier</div>
+            </div>
+            <button onClick={() => { setPName(''); setPFrom(''); setPTo(''); setPeriodModal(true) }}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--accent)', border: 'none', color: '#fff', padding: '10px 18px', borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: "'Syne',sans-serif" }}>
+              + Nouvelle période
+            </button>
+          </div>
+        </div>
+
+        {/* Periods list */}
+        <div style={{ flex: 1, overflow: 'auto', padding: '24px 32px' }}>
+          {periods.length === 0 ? (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '60%', gap: 16 }}>
+              <div style={{ fontSize: 48, opacity: .3 }}>📅</div>
+              <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 18, color: 'var(--fg2)' }}>Aucune période</div>
+              <div style={{ fontSize: 13, color: 'var(--fg3)', textAlign: 'center', maxWidth: 320 }}>Crée ta première période de planning — par exemple "Novembre 2026" avec les dates du 27 oct au 30 nov.</div>
+              <button onClick={() => { setPName(''); setPFrom(''); setPTo(''); setPeriodModal(true) }}
+                style={{ marginTop: 8, background: 'var(--accent)', border: 'none', color: '#fff', padding: '10px 20px', borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+                + Créer une période
+              </button>
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
+              {periods.map(p => {
+                const from = new Date(p.date_from + 'T00:00:00')
+                const to   = new Date(p.date_to + 'T00:00:00')
+                const days = Math.round((to - from) / 86400000) + 1
+                return (
+                  <div key={p.id}
+                    onClick={() => setActivePeriod(p)}
+                    style={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 14, padding: '20px 22px', cursor: 'pointer', transition: 'all .15s', position: 'relative' }}
+                    onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.background = 'color-mix(in srgb, var(--accent) 5%, var(--bg2))' }}
+                    onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.background = 'var(--bg2)' }}>
+                    <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 17, marginBottom: 8 }}>{p.name}</div>
+                    <div style={{ fontSize: 13, color: 'var(--fg2)', marginBottom: 4 }}>
+                      {from.getDate()} {FR_MONTHS_FR[from.getMonth()]} {from.getFullYear()} → {to.getDate()} {FR_MONTHS_FR[to.getMonth()]} {to.getFullYear()}
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--fg3)' }}>{days} jours</div>
+                    <button onClick={e => { e.stopPropagation(); onDeletePeriod(p.id) }}
+                      style={{ position: 'absolute', top: 12, right: 12, background: 'none', border: '1px solid var(--border)', color: 'var(--fg3)', width: 26, height: 26, borderRadius: 6, cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      ✕
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Create period modal */}
+        {periodModal && (
+          <div onClick={e => e.target === e.currentTarget && setPeriodModal(false)}
+            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.65)', backdropFilter: 'blur(4px)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 14, padding: 28, minWidth: 360, maxWidth: 460, width: '90%', boxShadow: '0 24px 64px rgba(0,0,0,.5)' }}>
+              <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 18, marginBottom: 20 }}>Nouvelle période</div>
+              <label style={{ fontSize: 11, color: 'var(--fg2)', fontWeight: 600, display: 'block', marginBottom: 5 }}>Nom</label>
+              <input autoFocus value={pName} onChange={e => setPName(e.target.value)}
+                placeholder="Ex: Novembre 2026, Hiver S44–S48…"
+                style={{ width: '100%', background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--fg)', padding: '9px 12px', borderRadius: 8, fontSize: 13, outline: 'none', marginBottom: 16, boxSizing: 'border-box' }} />
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 24 }}>
+                <div>
+                  <label style={{ fontSize: 11, color: 'var(--fg2)', fontWeight: 600, display: 'block', marginBottom: 5 }}>Du</label>
+                  <input type="date" value={pFrom} onChange={e => setPFrom(e.target.value)}
+                    style={{ width: '100%', background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--fg)', padding: '9px 10px', borderRadius: 8, fontSize: 13, outline: 'none', boxSizing: 'border-box' }} />
+                </div>
+                <div>
+                  <label style={{ fontSize: 11, color: 'var(--fg2)', fontWeight: 600, display: 'block', marginBottom: 5 }}>Au</label>
+                  <input type="date" value={pTo} onChange={e => setPTo(e.target.value)}
+                    style={{ width: '100%', background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--fg)', padding: '9px 10px', borderRadius: 8, fontSize: 13, outline: 'none', boxSizing: 'border-box' }} />
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                <button onClick={() => setPeriodModal(false)} style={{ background: 'none', border: '1px solid var(--border)', color: 'var(--fg2)', padding: '8px 16px', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>Annuler</button>
+                <button onClick={confirmCreatePeriod} disabled={!pName.trim() || !pFrom || !pTo}
+                  style={{ background: pName.trim() && pFrom && pTo ? 'var(--accent)' : 'var(--bg3)', border: 'none', color: pName.trim() && pFrom && pTo ? '#fff' : 'var(--fg3)', padding: '8px 20px', borderRadius: 8, cursor: pName.trim() && pFrom && pTo ? 'pointer' : 'not-allowed', fontSize: 13, fontWeight: 700 }}>
+                  Créer
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  }
+
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
@@ -281,6 +389,16 @@ export default function Planning({ site, employees, shiftDefs, shifts, templates
           </div>
         </div>
       )}
+
+      {/* Active period header */}
+      <div style={{ display:'flex', alignItems:'center', gap:12, padding:'8px 20px', borderBottom:'1px solid var(--border2)', flexShrink:0, background:'color-mix(in srgb, var(--accent) 6%, var(--bg))' }}>
+        <button onClick={() => setActivePeriod(null)}
+          style={{ background:'none', border:'1px solid var(--border)', color:'var(--fg2)', padding:'4px 10px', borderRadius:7, cursor:'pointer', fontSize:11, display:'flex', alignItems:'center', gap:5 }}>
+          ← Périodes
+        </button>
+        <div style={{ fontFamily:"'Syne',sans-serif", fontWeight:800, fontSize:14 }}>{activePeriod.name}</div>
+        <div style={{ fontSize:11, color:'var(--fg3)', marginLeft:4 }}>{activePeriod.date_from} → {activePeriod.date_to}</div>
+      </div>
 
       {/* Nav bar */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 20px', background: 'var(--bg2)', borderBottom: '1px solid var(--border2)', flexShrink: 0 }}>
