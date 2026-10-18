@@ -125,15 +125,18 @@ export default function App() {
       setEmployees(emps); setShiftDefs(defs); setPositions(pos)
       setTemplates(tpls); setClockings(clk)
       setPeriods(pers); setLoading(false)
-      // Validate + restore activePeriod — triggers the shifts useEffect below
+      // Validate restored activePeriod — only update if it changed (avoid re-triggering shifts load)
       const validPeriod = restoredPeriod ? (pers.find(p => p.id === restoredPeriod.id) || null) : null
-      setActivePeriod(validPeriod)
+      setActivePeriod(prev => {
+        if (prev?.id === validPeriod?.id) return prev // same object identity = no re-render
+        return validPeriod
+      })
     }).catch(err => { console.error(err); setLoading(false) })
   }, [siteId])
 
   // Load shifts — single source of truth, depends on activePeriod + week/month nav
   useEffect(() => {
-    if (!siteId) return
+    if (!siteId || loading) return
     let from, to
     if (activePeriod) {
       from = activePeriod.date_from; to = activePeriod.date_to
@@ -145,7 +148,7 @@ export default function App() {
       from = fmtDate(dates[0]); to = fmtDate(dates[6])
     }
     getShiftsForWeek(siteId, from, to).then(setShifts).catch(console.error)
-  }, [siteId, activePeriod, weekOffset, viewMode, monthYear, shiftsRefreshKey])
+  }, [siteId, loading, activePeriod, weekOffset, viewMode, monthYear, shiftsRefreshKey])
 
   useEffect(() => {
     if (!siteId) return
