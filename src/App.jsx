@@ -407,7 +407,7 @@ export default function App() {
                   onDropShift={handleDropShift} onDeleteShift={handleDeleteShift}
                   onSaveTemplate={handleSaveTemplate}
                   onRefreshShifts={handleRefreshShifts}
-                  weekDates={weekDates} fmtDate={fmtDate} />
+                  weekDates={weekDates} fmtDate={fmtDate} appLoading={loading} />
               )}
               {view === 'kpi' && (
                 <KPI site={site} employees={employees} />

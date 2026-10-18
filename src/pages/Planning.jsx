@@ -6,7 +6,7 @@ const FR_DAYS   = ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim']
 const FR_MONTHS      = ['jan','fév','mar','avr','mai','jun','jul','aoû','sep','oct','nov','déc']
 const FR_MONTHS_LONG = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre']
 
-export default function Planning({ site, employees, shiftDefs, shifts, templates, weekOffset, setWeekOffset, viewMode, setViewMode, monthYear, setMonthYear, monthWeekDates, periods, activePeriod, setActivePeriod, onCreatePeriod, onDeletePeriod, onDropShift, onDeleteShift, onSaveTemplate, onRefreshShifts, weekDates, fmtDate }) {
+export default function Planning({ site, employees, shiftDefs, shifts, templates, weekOffset, setWeekOffset, viewMode, setViewMode, monthYear, setMonthYear, monthWeekDates, periods, activePeriod, setActivePeriod, onCreatePeriod, onDeletePeriod, onDropShift, onDeleteShift, onSaveTemplate, onRefreshShifts, weekDates, fmtDate, appLoading }) {
   const [dragSource, setDragSource]   = useState(null)
   const dragRef = useRef(null)
   const [dropTarget, setDropTarget]   = useState(null)
@@ -311,6 +311,7 @@ export default function Planning({ site, employees, shiftDefs, shifts, templates
   }
 
   // ── Period home screen ─────────────────────────────────────────
+  if (appLoading) return null
   if (!activePeriod) {
     return (
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
