@@ -122,9 +122,9 @@ export default function App() {
       getShiftsForWeek(siteId, from, to),
       getTemplates(siteId),
       getClockingsForDate(siteId, today),
-    ]).then(([emps, defs, sh, tpls, clk, pos]) => {
-      setEmployees(emps); setShiftDefs(defs); setShifts(sh)
-      setTemplates(tpls); setClockings(clk); setPositions(pos); setLoading(false)
+    ]).then(([emps, defs, pos, sh, tpls, clk]) => {
+      setEmployees(emps); setShiftDefs(defs); setPositions(pos)
+      setShifts(sh); setTemplates(tpls); setClockings(clk); setLoading(false)
     }).catch(err => { console.error(err); setLoading(false) })
   }, [siteId, weekOffset, viewMode, monthYear])
 
