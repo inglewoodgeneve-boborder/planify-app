@@ -175,7 +175,9 @@ export default function App() {
   const handleRefreshShifts = useCallback(async () => {
     if (!siteId) return
     let from, to
-    if (viewMode === 'month') {
+    if (activePeriod) {
+      from = activePeriod.date_from; to = activePeriod.date_to
+    } else if (viewMode === 'month') {
       const weeks = monthWeekDates(monthYear.year, monthYear.month)
       from = fmtDate(weeks[0][0]); to = fmtDate(weeks[weeks.length - 1][6])
     } else {
@@ -184,7 +186,15 @@ export default function App() {
     }
     const sh = await getShiftsForWeek(siteId, from, to)
     setShifts(sh)
-  }, [siteId, weekOffset, viewMode, monthYear])
+  }, [siteId, weekOffset, viewMode, monthYear, activePeriod])
+
+  // Reload shifts when active period changes
+  useEffect(() => {
+    if (!siteId) return
+    if (activePeriod) {
+      getShiftsForWeek(siteId, activePeriod.date_from, activePeriod.date_to).then(setShifts).catch(console.error)
+    }
+  }, [siteId, activePeriod])
 
   const handleSaveTemplate = useCallback(async (name, slotsArray) => {
     try {

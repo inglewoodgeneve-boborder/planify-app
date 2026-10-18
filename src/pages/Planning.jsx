@@ -307,6 +307,7 @@ export default function Planning({ site, employees, shiftDefs, shifts, templates
 
     setActivePeriod(p)
     setPeriodModal(false)
+    // Shifts will be reloaded by the activePeriod useEffect in App.jsx
   }
 
   // ── Period home screen ─────────────────────────────────────────
@@ -527,7 +528,22 @@ export default function Planning({ site, employees, shiftDefs, shifts, templates
           />
         ) : (
           <div style={{ display: 'flex', flexDirection: 'row', height: '100%' }}>
-            {monthWeekDates && monthWeekDates(monthYear.year, monthYear.month).map((weekDays, wi) => (
+            {(() => {
+              // Compute weeks from period range
+              const start = new Date(activePeriod.date_from + 'T00:00:00')
+              const end   = new Date(activePeriod.date_to   + 'T00:00:00')
+              const startDay = start.getDay()
+              const mondayOffset = startDay === 0 ? -6 : 1 - startDay
+              const firstMon = new Date(start)
+              firstMon.setDate(firstMon.getDate() + mondayOffset)
+              const periodWeeks = []
+              let cur = new Date(firstMon)
+              while (cur <= end) {
+                periodWeeks.push(Array.from({ length: 7 }, (_, i) => { const d = new Date(cur); d.setDate(d.getDate() + i); return d }))
+                cur.setDate(cur.getDate() + 7)
+              }
+              return periodWeeks
+            })().map((weekDays, wi) => (
               <div key={wi} style={{ flexShrink: 0, borderRight: '2px solid var(--border)', display: 'flex', flexDirection: 'column' }}>
                 {/* Week label */}
                 <div style={{ padding: '6px 16px', background: 'color-mix(in srgb, var(--accent) 8%, var(--bg2))', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
