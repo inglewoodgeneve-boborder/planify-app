@@ -18,13 +18,14 @@ function daysInMonth(year, month) {
   return new Date(year, month + 1, 0).getDate()
 }
 
-export default function KPI({ site, employees, shifts, onLoadShiftsForMonth }) {
+export default function KPI({ site, employees }) {
   const now = new Date()
   const [year,  setYear]  = useState(now.getFullYear())
   const [month, setMonth] = useState(now.getMonth()) // 0-based
   const [entries, setEntries] = useState({}) // { dateStr: { id, ca_prevision, ca_reel } }
   const [saving,  setSaving]  = useState({})
   const [loading, setLoading] = useState(false)
+  const [kpiShifts, setKpiShifts] = useState([])
 
   // Dates of the month
   const dates = (() => {
@@ -40,26 +41,28 @@ export default function KPI({ site, employees, shifts, onLoadShiftsForMonth }) {
   const dateFrom = dates[0]
   const dateTo   = dates[dates.length - 1]
 
-  // Ask parent to load shifts for this month
-  useEffect(() => {
-    if (onLoadShiftsForMonth) onLoadShiftsForMonth(dateFrom, dateTo)
-  }, [dateFrom, dateTo])
-
-  // Load kpi_entries for this month
+  // Load kpi_entries + shifts for this month
   useEffect(() => {
     if (!site?.id) return
     setLoading(true)
-    supabase.from('kpi_entries')
-      .select('*')
-      .eq('site_id', site.id)
-      .gte('work_date', dateFrom)
-      .lte('work_date', dateTo)
-      .then(({ data }) => {
-        const map = {}
-        ;(data || []).forEach(e => { map[e.work_date] = e })
-        setEntries(map)
-        setLoading(false)
-      })
+    Promise.all([
+      supabase.from('kpi_entries')
+        .select('*')
+        .eq('site_id', site.id)
+        .gte('work_date', dateFrom)
+        .lte('work_date', dateTo),
+      supabase.from('shifts')
+        .select('*, employees(*)')
+        .eq('site_id', site.id)
+        .gte('work_date', dateFrom)
+        .lte('work_date', dateTo)
+    ]).then(([{ data: kpiData }, { data: shiftData }]) => {
+      const map = {}
+      ;(kpiData || []).forEach(e => { map[e.work_date] = e })
+      setEntries(map)
+      setKpiShifts(shiftData || [])
+      setLoading(false)
+    })
   }, [site?.id, dateFrom, dateTo])
 
   const saveField = useCallback(async (dateStr, field, rawValue) => {
@@ -83,7 +86,7 @@ export default function KPI({ site, employees, shifts, onLoadShiftsForMonth }) {
   }, [entries, site?.id])
 
   function getDayPayroll(dateStr) {
-    const dayShifts = shifts.filter(s => s.work_date === dateStr && s.employee_id)
+    const dayShifts = kpiShifts.filter(s => s.work_date === dateStr && s.employee_id)
     return dayShifts.reduce((total, s) => {
       const emp = employees.find(e => e.id === s.employee_id)
       if (!emp?.hourly_rate) return total
@@ -183,7 +186,7 @@ export default function KPI({ site, employees, shifts, onLoadShiftsForMonth }) {
                 const caP    = entry.ca_prevision != null ? parseFloat(entry.ca_prevision) : null
                 const caR    = entry.ca_reel      != null ? parseFloat(entry.ca_reel)      : null
                 const ratio  = payroll > 0 && caR > 0 ? (payroll / caR) * 100 : null
-                const dayShifts = shifts.filter(s => s.work_date === dateStr && s.employee_id)
+                const dayShifts = kpiShifts.filter(s => s.work_date === dateStr && s.employee_id)
                 const rowBg  = isWE
                   ? 'color-mix(in srgb, var(--accent) 4%, var(--bg))'
                   : i % 2 === 0 ? 'var(--bg)' : 'var(--bg2)'
@@ -248,7 +251,7 @@ export default function KPI({ site, employees, shifts, onLoadShiftsForMonth }) {
               <tr style={{ borderTop: '2px solid var(--border)', background: 'var(--bg2)', fontWeight: 700 }}>
                 <td style={cellStyle}>Total {FR_MONTHS_LONG[month]}</td>
                 <td style={numCell}>
-                  {shifts.filter(s => s.employee_id && dates.includes(s.work_date)).length} shifts
+                  {kpiShifts.filter(s => s.employee_id && dates.includes(s.work_date)).length} shifts
                 </td>
                 <td style={numCell}>
                   <span style={{ color: '#f97316' }}>CHF {totals.payroll.toFixed(2)}</span>

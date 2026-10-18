@@ -398,11 +398,7 @@ export default function App() {
                   weekDates={weekDates} fmtDate={fmtDate} />
               )}
               {view === 'kpi' && (
-                <KPI site={site} employees={employees} shifts={shifts}
-                  onLoadShiftsForMonth={async (from, to) => {
-                    const sh = await getShiftsForWeek(siteId, from, to)
-                    setShifts(sh)
-                  }} />
+                <KPI site={site} employees={employees} />
               )}
               {view === 'pointage' && (
                 <Pointage site={site} employees={employees} shifts={shifts}
