@@ -118,7 +118,7 @@ export default function App() {
     Promise.all([
       getEmployees(siteId),
       getShiftDefs(siteId),
-      supabase.from('positions').select('*').order('created_at').then(r => r.data || []),
+      supabase.from('positions').select('*').eq('site_id', siteId).order('created_at').then(r => r.data || []),
       getShiftsForWeek(siteId, from, to),
       getTemplates(siteId),
       getClockingsForDate(siteId, today),
@@ -404,7 +404,7 @@ export default function App() {
                     setShiftDefs(prev => prev.filter(x => x.id !== id))
                   }}
                   onCreatePosition={async (data) => {
-                    const { data: p } = await supabase.from('positions').insert(data).select().single()
+                    const { data: p } = await supabase.from('positions').insert({ ...data, site_id: siteId }).select().single()
                     if (p) setPositions(prev => [...prev, p])
                   }}
                   onDeletePosition={async (id) => {
@@ -414,7 +414,7 @@ export default function App() {
                   onRefresh={() => {
                     getEmployees(siteId).then(setEmployees)
                     getShiftDefs(siteId).then(setShiftDefs)
-                    supabase.from('positions').select('*').order('created_at').then(r => setPositions(r.data || []))
+                    supabase.from('positions').select('*').eq('site_id', siteId).order('created_at').then(r => setPositions(r.data || []))
                   }} />
               )}
               {(view === 'absences' || view === 'vacances' || view === 'feuilles') && (
