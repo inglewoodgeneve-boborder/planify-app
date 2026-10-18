@@ -618,7 +618,21 @@ export default function Config({ site, employees, shiftDefs, positions, onCreate
 
   return (
     <div style={{ maxWidth: 820, margin: '0 auto', padding: '28px 20px' }}>
-      <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 22, marginBottom: 24 }}>Configuration</div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+        <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 22 }}>Configuration</div>
+        {site?.id && (
+          <a
+            href={`/kiosk?site=${site.id}&name=${encodeURIComponent(site.name || '')}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--bg2)', border: '1px solid var(--border)', color: 'var(--fg2)', padding: '8px 14px', borderRadius: 10, fontSize: 12, fontWeight: 600, textDecoration: 'none', transition: 'all .15s' }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.color = 'var(--accent)' }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--fg2)' }}
+          >
+            🖥 Ouvrir la pointeuse
+          </a>
+        )}
+      </div>
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 4, marginBottom: 28, borderBottom: '1px solid var(--border)' }}>
