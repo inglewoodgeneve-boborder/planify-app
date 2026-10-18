@@ -106,14 +106,29 @@ export default function App() {
     })
   }, [])
 
-  // Main data load — runs once per siteId, does NOT load shifts (handled separately)
+  // Main data load — runs on siteId change or manual refresh
+  // Includes shifts so everything loads atomically
   useEffect(() => {
     if (!siteId) return
     setLoading(true)
     const today = fmtDate(new Date())
-    // Read activePeriod from localStorage directly (state not yet set on first render)
+
+    // Read activePeriod from localStorage (state may already have it, but read fresh to be sure)
     let restoredPeriod = null
     try { const s = localStorage.getItem('pfy_activePeriod'); if (s) restoredPeriod = JSON.parse(s) } catch {}
+
+    // Compute shift range based on restored period or current week/month
+    let shFrom, shTo
+    if (restoredPeriod) {
+      shFrom = restoredPeriod.date_from; shTo = restoredPeriod.date_to
+    } else if (viewMode === 'month') {
+      const weeks = monthWeekDates(monthYear.year, monthYear.month)
+      shFrom = fmtDate(weeks[0][0]); shTo = fmtDate(weeks[weeks.length - 1][6])
+    } else {
+      const dates = weekDates(weekOffset)
+      shFrom = fmtDate(dates[0]); shTo = fmtDate(dates[6])
+    }
+
     Promise.all([
       getEmployees(siteId),
       getShiftDefs(siteId),
@@ -121,22 +136,23 @@ export default function App() {
       getTemplates(siteId),
       getClockingsForDate(siteId, today),
       supabase.from('planning_periods').select('*').eq('site_id', siteId).order('date_from').then(r => r.data || []),
-    ]).then(([emps, defs, pos, tpls, clk, pers]) => {
+      getShiftsForWeek(siteId, shFrom, shTo),
+    ]).then(([emps, defs, pos, tpls, clk, pers, sh]) => {
       setEmployees(emps); setShiftDefs(defs); setPositions(pos)
-      setTemplates(tpls); setClockings(clk)
-      setPeriods(pers); setLoading(false)
-      // Validate restored activePeriod — only update if it changed (avoid re-triggering shifts load)
+      setTemplates(tpls); setClockings(clk); setPeriods(pers)
+      // Validate period
       const validPeriod = restoredPeriod ? (pers.find(p => p.id === restoredPeriod.id) || null) : null
-      setActivePeriod(prev => {
-        if (prev?.id === validPeriod?.id) return prev // same object identity = no re-render
-        return validPeriod
-      })
+      setActivePeriod(validPeriod)
+      setShifts(sh)
+      setLoading(false)
     }).catch(err => { console.error(err); setLoading(false) })
-  }, [siteId])
+  }, [siteId, shiftsRefreshKey])
 
-  // Load shifts — single source of truth, depends on activePeriod + week/month nav
+  // Reload shifts when week/month nav changes (but not on initial load — handled above)
+  const initialLoadDone = useRef(false)
   useEffect(() => {
-    if (!siteId || loading) return
+    if (!initialLoadDone.current) { initialLoadDone.current = true; return }
+    if (!siteId) return
     let from, to
     if (activePeriod) {
       from = activePeriod.date_from; to = activePeriod.date_to
@@ -148,7 +164,7 @@ export default function App() {
       from = fmtDate(dates[0]); to = fmtDate(dates[6])
     }
     getShiftsForWeek(siteId, from, to).then(setShifts).catch(console.error)
-  }, [siteId, loading, activePeriod, weekOffset, viewMode, monthYear, shiftsRefreshKey])
+  }, [siteId, activePeriod, weekOffset, viewMode, monthYear])
 
   useEffect(() => {
     if (!siteId) return
