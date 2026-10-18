@@ -404,7 +404,8 @@ export default function App() {
                     setShiftDefs(prev => prev.filter(x => x.id !== id))
                   }}
                   onCreatePosition={async (data) => {
-                    const { data: p } = await supabase.from('positions').insert({ ...data, site_id: siteId }).select().single()
+                    const { data: p, error: pe } = await supabase.from('positions').insert({ ...data, site_id: siteId }).select().single()
+                    console.log('CREATE POSITION', { data, siteId, p, pe })
                     if (p) setPositions(prev => [...prev, p])
                   }}
                   onDeletePosition={async (id) => {
