@@ -33,6 +33,7 @@ export default function App() {
   const [siteId, setSiteId]         = useState(null)
   const [employees, setEmployees]   = useState([])
   const [shiftDefs, setShiftDefs]   = useState([])
+  const [positions, setPositions]   = useState([])
   const [shifts, setShifts]         = useState([])
   const [templates, setTemplates]   = useState([])
   const [clockings, setClockings]   = useState([])
@@ -86,12 +87,13 @@ export default function App() {
     Promise.all([
       getEmployees(siteId),
       getShiftDefs(siteId),
+      supabase.from('positions').select('*').order('created_at').then(r => r.data || []),
       getShiftsForWeek(siteId, from, to),
       getTemplates(siteId),
       getClockingsForDate(siteId, today),
-    ]).then(([emps, defs, sh, tpls, clk]) => {
+    ]).then(([emps, defs, sh, tpls, clk, pos]) => {
       setEmployees(emps); setShiftDefs(defs); setShifts(sh)
-      setTemplates(tpls); setClockings(clk); setLoading(false)
+      setTemplates(tpls); setClockings(clk); setPositions(pos); setLoading(false)
     }).catch(err => { console.error(err); setLoading(false) })
   }, [siteId, weekOffset])
 
@@ -332,10 +334,19 @@ export default function App() {
                   weekOffset={weekOffset} fmtDate={fmtDate} />
               )}
               {view === 'config' && (
-                <Config site={site} siteId={siteId} employees={employees} shiftDefs={shiftDefs}
+                <Config site={site} siteId={siteId} employees={employees} shiftDefs={shiftDefs} positions={positions}
+                  onCreatePosition={async (data) => {
+                    const { data: p } = await supabase.from('positions').insert(data).select().single()
+                    if (p) setPositions(prev => [...prev, p])
+                  }}
+                  onDeletePosition={async (id) => {
+                    await supabase.from('positions').delete().eq('id', id)
+                    setPositions(prev => prev.filter(p => p.id !== id))
+                  }}
                   onRefresh={() => {
                     getEmployees(siteId).then(setEmployees)
                     getShiftDefs(siteId).then(setShiftDefs)
+                    supabase.from('positions').select('*').order('created_at').then(r => setPositions(r.data || []))
                   }} />
               )}
               {(view === 'absences' || view === 'vacances' || view === 'feuilles') && (

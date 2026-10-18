@@ -57,11 +57,12 @@ function ContratFixeFields({ emp, setF }) {
 }
 
 
-// ── EmployeeRates : taux horaires par type de shift ──────────────────────────
-function EmployeeRates({ employeeId, shiftDefs }) {
+
+// ── EmployeeRates : taux horaires par position ───────────────────────────────
+function EmployeeRates({ employeeId, positions }) {
   const [rates, setRates]     = useState([])
   const [loading, setLoading] = useState(true)
-  const [newDef, setNewDef]   = useState('')
+  const [newPos, setNewPos]   = useState('')
   const [newRate, setNewRate] = useState('')
   const [saving, setSaving]   = useState(false)
 
@@ -73,18 +74,18 @@ function EmployeeRates({ employeeId, shiftDefs }) {
       .then(({ data }) => { setRates(data || []); setLoading(false) })
   }, [employeeId])
 
-  const available = shiftDefs.filter(d => !rates.find(r => r.shift_def_id === d.id))
+  const available = positions.filter(p => !rates.find(r => r.position_id === p.id))
 
   async function addRate(e) {
     e.preventDefault()
-    if (!newDef || !newRate) return
+    if (!newPos || !newRate) return
     setSaving(true)
     const { data, error } = await supabase.from('employee_rates').insert({
       employee_id: employeeId,
-      shift_def_id: newDef,
+      position_id: newPos,
       hourly_rate: parseFloat(newRate),
     }).select().single()
-    if (!error && data) { setRates(r => [...r, data]); setNewDef(''); setNewRate('') }
+    if (!error && data) { setRates(r => [...r, data]); setNewPos(''); setNewRate('') }
     setSaving(false)
   }
 
@@ -104,21 +105,19 @@ function EmployeeRates({ employeeId, shiftDefs }) {
 
   return (
     <div style={{ gridColumn: '1 / -1' }}>
-      <label style={lbl}>Taux horaires par type de shift</label>
+      <label style={lbl}>Taux horaires par position</label>
       <div style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
         {rates.length === 0 && (
           <div style={{ padding: '10px 14px', fontSize: 12, color: 'var(--fg3)' }}>
-            Aucun taux spécifique — le taux de base s'applique à tous les shifts
+            Aucun taux spécifique — le taux de base s'applique à toutes les positions
           </div>
         )}
         {rates.map(rate => {
-          const def = shiftDefs.find(d => d.id === rate.shift_def_id)
-          if (!def) return null
+          const pos = positions.find(p => p.id === rate.position_id)
+          if (!pos) return null
           return (
             <div key={rate.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderBottom: '1px solid var(--border)' }}>
-              <span style={{ width: 8, height: 8, borderRadius: '50%', background: def.color, flexShrink: 0 }} />
-              <span style={{ flex: 1, fontSize: 13, fontWeight: 600 }}>{def.label}</span>
-              <span style={{ fontSize: 11, color: 'var(--fg3)' }}>{def.start_time?.slice(0,5)}–{def.end_time?.slice(0,5)}</span>
+              <span style={{ flex: 1, fontSize: 13, fontWeight: 600 }}>{pos.label}</span>
               <input
                 type="number" step="0.05" min="0"
                 defaultValue={rate.hourly_rate}
@@ -132,11 +131,9 @@ function EmployeeRates({ employeeId, shiftDefs }) {
         })}
         {available.length > 0 && (
           <form onSubmit={addRate} style={{ display: 'flex', gap: 8, padding: '10px 12px', background: 'var(--bg2)', alignItems: 'center' }}>
-            <select value={newDef} onChange={e => setNewDef(e.target.value)} style={{ ...inp, flex: 1, padding: '6px 8px' }}>
-              <option value="">— Choisir un type de shift</option>
-              {available.map(d => (
-                <option key={d.id} value={d.id}>{d.label} ({d.start_time?.slice(0,5)}–{d.end_time?.slice(0,5)})</option>
-              ))}
+            <select value={newPos} onChange={e => setNewPos(e.target.value)} style={{ ...inp, flex: 1, padding: '6px 8px' }}>
+              <option value="">— Choisir une position</option>
+              {available.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
             </select>
             <input
               type="number" step="0.05" min="0"
@@ -144,15 +141,15 @@ function EmployeeRates({ employeeId, shiftDefs }) {
               placeholder="CHF/h"
               style={{ ...inp, width: 90, padding: '6px 8px', fontFamily: "'DM Mono',monospace" }}
             />
-            <button type="submit" disabled={!newDef || !newRate || saving}
-              style={newDef && newRate && !saving ? { ...btnPrimary, padding: '6px 14px' } : { ...btnDisabled, padding: '6px 14px' }}>
+            <button type="submit" disabled={!newPos || !newRate || saving}
+              style={newPos && newRate && !saving ? { ...btnPrimary, padding: '6px 14px' } : { ...btnDisabled, padding: '6px 14px' }}>
               + Ajouter
             </button>
           </form>
         )}
       </div>
       <div style={{ fontSize: 11, color: 'var(--fg3)', marginTop: 6 }}>
-        💡 Ces taux remplacent le taux de base pour le calcul des staff costs par shift
+        💡 Ces taux s'appliquent automatiquement selon la position liée au shift travaillé
       </div>
     </div>
   )
@@ -500,7 +497,7 @@ function WorkPlanTab({ shiftDefs }) {
 }
 
 // ── Config (default export) ──────────────────────────────────────────────────
-export default function Config({ site, employees, shiftDefs, onCreateEmployee, onUpdateEmployee, onDeleteEmployee, onCreateShiftDef, onDeleteShiftDef, onResetPin }) {
+export default function Config({ site, employees, shiftDefs, positions, onCreateEmployee, onUpdateEmployee, onDeleteEmployee, onCreateShiftDef, onDeleteShiftDef, onCreatePosition, onDeletePosition, onResetPin }) {
   const [tab, setTab]             = useState('shifts')
   const [showForm, setShowForm]   = useState(false)
   const [editingId, setEditingId] = useState(null)
@@ -508,6 +505,7 @@ export default function Config({ site, employees, shiftDefs, onCreateEmployee, o
   const [submitting, setSubmitting] = useState(false)
   const [inviting, setInviting]   = useState(null)
 
+  const [defPosition, setDefPosition] = useState('')
   const [defLabel, setDefLabel] = useState('')
   const [defStart, setDefStart] = useState('08:00')
   const [defEnd, setDefEnd]     = useState('16:00')
@@ -548,8 +546,8 @@ export default function Config({ site, employees, shiftDefs, onCreateEmployee, o
   async function submitDef(e) {
     e.preventDefault()
     if (!defLabel.trim()) return
-    await onCreateShiftDef({ label: defLabel.trim(), start_time: defStart, end_time: defEnd, color: defColor })
-    setDefLabel(''); setDefStart('08:00'); setDefEnd('16:00'); setDefColor(COLORS[0])
+    await onCreateShiftDef({ label: defLabel.trim(), start_time: defStart, end_time: defEnd, color: defColor, position_id: defPosition || null })
+    setDefLabel(''); setDefStart('08:00'); setDefEnd('16:00'); setDefColor(COLORS[0]); setDefPosition('')
   }
 
   function buildPayload() {
@@ -612,6 +610,7 @@ export default function Config({ site, employees, shiftDefs, onCreateEmployee, o
   const canSubmit = emp.first_name.trim() && emp.last_name.trim()
 
   const TABS = [
+    { id: 'positions', label: '🏷 Positions' },
     { id: 'shifts',   label: '⚡ Types de shifts' },
     { id: 'plan',     label: '📋 Plan de travail' },
     { id: 'employes', label: '👥 Employés' },
@@ -636,6 +635,53 @@ export default function Config({ site, employees, shiftDefs, onCreateEmployee, o
       </div>
 
       {/* ── Types de shifts ── */}
+      {/* ── Positions ── */}
+      {tab === 'positions' && (
+        <div>
+          <form onSubmit={async e => {
+            e.preventDefault()
+            const label = e.target.posLabel.value.trim()
+            if (!label) return
+            await onCreatePosition({ label })
+            e.target.reset()
+          }} style={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 12, padding: 20, marginBottom: 24 }}>
+            <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 14, marginBottom: 16 }}>Nouvelle position</div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <input name="posLabel" placeholder="Gérant, Shift Manager, Serveur, Cuisinier…" style={{ ...inp, flex: 1 }} />
+              <button type="submit" style={btnPrimary}>+ Ajouter</button>
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--fg3)', marginTop: 8 }}>
+              Les positions permettent de lier un taux horaire à un rôle précis dans les shifts
+            </div>
+          </form>
+          {(positions || []).length === 0 ? (
+            <div style={{ textAlign: 'center', color: 'var(--fg3)', fontSize: 13, padding: 40 }}>Aucune position — crée la première ci-dessus</div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {(positions || []).map(pos => {
+                const linkedShifts = shiftDefs.filter(d => d.position_id === pos.id)
+                return (
+                  <div key={pos.id} style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 10, padding: '12px 16px' }}>
+                    <span style={{ fontWeight: 600, fontSize: 13, flex: 1 }}>🏷 {pos.label}</span>
+                    {linkedShifts.length > 0 && (
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        {linkedShifts.map(s => (
+                          <span key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, background: s.color + '22', border: `1px solid ${s.color}55`, padding: '2px 8px', borderRadius: 20 }}>
+                            <span style={{ width: 6, height: 6, borderRadius: '50%', background: s.color }} />
+                            {s.label}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    <button onClick={() => onDeletePosition(pos.id)} style={btnGhost}>Supprimer</button>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
       {tab === 'shifts' && (
         <div>
           <form onSubmit={submitDef} style={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 12, padding: 20, marginBottom: 24 }}>
@@ -653,6 +699,13 @@ export default function Config({ site, employees, shiftDefs, onCreateEmployee, o
                 <label style={lbl}>Fin</label>
                 <input type="time" value={defEnd} onChange={e => setDefEnd(e.target.value)} style={inp} />
               </div>
+            </div>
+            <div style={{ marginBottom: 14 }}>
+              <label style={lbl}>Position (optionnel)</label>
+              <select value={defPosition} onChange={e => setDefPosition(e.target.value)} style={inp}>
+                <option value="">— Aucune position associée</option>
+                {(positions || []).map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
+              </select>
             </div>
             <div style={{ marginBottom: 16 }}>
               <label style={lbl}>Couleur</label>
@@ -686,16 +739,20 @@ export default function Config({ site, employees, shiftDefs, onCreateEmployee, o
             <div style={{ textAlign: 'center', color: 'var(--fg3)', fontSize: 13, padding: 40 }}>Aucun type de shift — crée le premier ci-dessus</div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {shiftDefs.map(def => (
-                <div key={def.id} style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 10, padding: '12px 16px' }}>
-                  <span style={{ width: 12, height: 12, borderRadius: '50%', background: def.color, flexShrink: 0 }} />
-                  <span style={{ fontWeight: 600, fontSize: 13, flex: 1 }}>{def.label}</span>
-                  <span style={{ fontSize: 12, color: 'var(--fg2)', background: 'var(--bg3)', padding: '3px 10px', borderRadius: 20 }}>
-                    {def.start_time?.slice(0,5)} – {def.end_time?.slice(0,5)}
-                  </span>
-                  <button onClick={() => onDeleteShiftDef(def.id)} style={btnGhost}>Supprimer</button>
-                </div>
-              ))}
+              {shiftDefs.map(def => {
+                const pos = (positions || []).find(p => p.id === def.position_id)
+                return (
+                  <div key={def.id} style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 10, padding: '12px 16px' }}>
+                    <span style={{ width: 12, height: 12, borderRadius: '50%', background: def.color, flexShrink: 0 }} />
+                    <span style={{ fontWeight: 600, fontSize: 13, flex: 1 }}>{def.label}</span>
+                    {pos && <span style={{ fontSize: 11, color: 'var(--accent)', background: 'var(--accent-dim)', padding: '2px 8px', borderRadius: 20, fontWeight: 600 }}>🏷 {pos.label}</span>}
+                    <span style={{ fontSize: 12, color: 'var(--fg2)', background: 'var(--bg3)', padding: '3px 10px', borderRadius: 20 }}>
+                      {def.start_time?.slice(0,5)} – {def.end_time?.slice(0,5)}
+                    </span>
+                    <button onClick={() => onDeleteShiftDef(def.id)} style={btnGhost}>Supprimer</button>
+                  </div>
+                )
+              })}
             </div>
           )}
         </div>
@@ -775,7 +832,7 @@ export default function Config({ site, employees, shiftDefs, onCreateEmployee, o
 
                     {/* Taux par rôle */}
                     {editingId ? (
-                      <EmployeeRates employeeId={editingId} shiftDefs={shiftDefs} />
+                      <EmployeeRates employeeId={editingId} positions={positions || []} />
                     ) : (
                       <div style={{ gridColumn: '1 / -1' }}>
                         <div style={{ fontSize: 12, color: 'var(--fg3)', background: 'var(--bg3)', padding: '10px 14px', borderRadius: 8, border: '1px solid var(--border)' }}>
