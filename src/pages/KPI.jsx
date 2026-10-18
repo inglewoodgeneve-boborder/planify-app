@@ -30,8 +30,10 @@ export default function KPI({ site, employees, shifts, onLoadShiftsForMonth }) {
   const dates = (() => {
     const n = daysInMonth(year, month)
     return Array.from({ length: n }, (_, i) => {
-      const d = new Date(year, month, i + 1)
-      return d.toISOString().split('T')[0]
+      const day = i + 1
+      const mm  = String(month + 1).padStart(2, '0')
+      const dd  = String(day).padStart(2, '0')
+      return `${year}-${mm}-${dd}`
     })
   })()
 
