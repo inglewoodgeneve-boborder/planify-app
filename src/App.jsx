@@ -105,21 +105,12 @@ export default function App() {
     })
   }, [])
 
+  // Main data load — runs once per siteId, does NOT load shifts (handled separately)
   useEffect(() => {
     if (!siteId) return
     setLoading(true)
-    let from, to
-    if (viewMode === 'month') {
-      const weeks = monthWeekDates(monthYear.year, monthYear.month)
-      from = fmtDate(weeks[0][0])
-      to   = fmtDate(weeks[weeks.length - 1][6])
-    } else {
-      const dates = weekDates(weekOffset)
-      from = fmtDate(dates[0])
-      to   = fmtDate(dates[6])
-    }
     const today = fmtDate(new Date())
-    // Read activePeriod from localStorage directly (state may not be set yet)
+    // Read activePeriod from localStorage directly (state not yet set on first render)
     let restoredPeriod = null
     try { const s = localStorage.getItem('pfy_activePeriod'); if (s) restoredPeriod = JSON.parse(s) } catch {}
     Promise.all([
@@ -133,15 +124,27 @@ export default function App() {
       setEmployees(emps); setShiftDefs(defs); setPositions(pos)
       setTemplates(tpls); setClockings(clk)
       setPeriods(pers); setLoading(false)
-      // Validate restored activePeriod still exists
+      // Validate + restore activePeriod — triggers the shifts useEffect below
       const validPeriod = restoredPeriod ? (pers.find(p => p.id === restoredPeriod.id) || null) : null
       setActivePeriod(validPeriod)
-      // Load shifts for the right range
-      const shFrom = validPeriod ? validPeriod.date_from : from
-      const shTo   = validPeriod ? validPeriod.date_to   : to
-      getShiftsForWeek(siteId, shFrom, shTo).then(setShifts).catch(console.error)
     }).catch(err => { console.error(err); setLoading(false) })
-  }, [siteId, weekOffset, viewMode, monthYear])
+  }, [siteId])
+
+  // Load shifts — single source of truth, depends on activePeriod + week/month nav
+  useEffect(() => {
+    if (!siteId) return
+    let from, to
+    if (activePeriod) {
+      from = activePeriod.date_from; to = activePeriod.date_to
+    } else if (viewMode === 'month') {
+      const weeks = monthWeekDates(monthYear.year, monthYear.month)
+      from = fmtDate(weeks[0][0]); to = fmtDate(weeks[weeks.length - 1][6])
+    } else {
+      const dates = weekDates(weekOffset)
+      from = fmtDate(dates[0]); to = fmtDate(dates[6])
+    }
+    getShiftsForWeek(siteId, from, to).then(setShifts).catch(console.error)
+  }, [siteId, activePeriod, weekOffset, viewMode, monthYear, shiftsRefreshKey])
 
   useEffect(() => {
     if (!siteId) return
@@ -183,32 +186,10 @@ export default function App() {
     catch (err) { showToast('Erreur : ' + err.message, 'error') }
   }, [showToast])
 
-  const handleRefreshShifts = useCallback(async () => {
-    if (!siteId) return
-    let from, to
-    if (activePeriod) {
-      from = activePeriod.date_from; to = activePeriod.date_to
-    } else if (viewMode === 'month') {
-      const weeks = monthWeekDates(monthYear.year, monthYear.month)
-      from = fmtDate(weeks[0][0]); to = fmtDate(weeks[weeks.length - 1][6])
-    } else {
-      const dates = weekDates(weekOffset)
-      from = fmtDate(dates[0]); to = fmtDate(dates[6])
-    }
-    const sh = await getShiftsForWeek(siteId, from, to)
-    setShifts(sh)
-  }, [siteId, weekOffset, viewMode, monthYear, activePeriod])
-
-  // Reload shifts when active period changes (opened/closed during session)
-  const prevActivePeriodRef = useRef(undefined)
-  useEffect(() => {
-    if (prevActivePeriodRef.current === undefined) { prevActivePeriodRef.current = activePeriod; return }
-    if (!siteId) return
-    if (activePeriod) {
-      getShiftsForWeek(siteId, activePeriod.date_from, activePeriod.date_to).then(setShifts).catch(console.error)
-    }
-    prevActivePeriodRef.current = activePeriod
-  }, [siteId, activePeriod])
+  const [shiftsRefreshKey, setShiftsRefreshKey] = useState(0)
+  const handleRefreshShifts = useCallback(() => {
+    setShiftsRefreshKey(k => k + 1)
+  }, [])
 
   // Persist navigation state to localStorage
   useEffect(() => { localStorage.setItem('pfy_view', view) }, [view])
