@@ -7,10 +7,12 @@ import Planning from './pages/Planning'
 import Pointage from './pages/Pointage'
 import Rapports from './pages/Rapports'
 import Config from './pages/Config'
+import KPI    from './pages/KPI'
 
 // NAV : items plats ou avec children pour groupe déroulant
 const NAV = [
   { id: 'planning',  label: 'Planning',           icon: '▦' },
+  { id: 'kpi',       label: 'KPI',                icon: '📈' },
   { id: 'temps',     label: 'Temps des employés', icon: '⏱', children: [
     { id: 'pointage', label: 'Pointage',           icon: '🕐' },
     { id: 'feuilles', label: "Feuilles d'heure",   icon: '📄' },
@@ -394,6 +396,9 @@ export default function App() {
                   onSaveTemplate={handleSaveTemplate}
                   onRefreshShifts={handleRefreshShifts}
                   weekDates={weekDates} fmtDate={fmtDate} />
+              )}
+              {view === 'kpi' && (
+                <KPI site={site} activePeriod={activePeriod} employees={employees} shifts={shifts} />
               )}
               {view === 'pointage' && (
                 <Pointage site={site} employees={employees} shifts={shifts}
