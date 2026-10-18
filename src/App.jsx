@@ -38,6 +38,8 @@ export default function App() {
   const [templates, setTemplates]   = useState([])
   const [clockings, setClockings]   = useState([])
   const [weekOffset, setWeekOffset] = useState(0)
+  const [viewMode, setViewMode]       = useState('week') // 'week' | 'month'
+  const [monthYear, setMonthYear]     = useState(() => { const n = new Date(); return { year: n.getFullYear(), month: n.getMonth() } })
   const [loading, setLoading]       = useState(true)
   const [toast, setToast]           = useState(null)
 
@@ -54,6 +56,28 @@ export default function App() {
       const d = new Date(mon); d.setDate(mon.getDate() + i); return d
     })
   }
+  // Returns array of 7-date arrays for all weeks touching the given month
+  function monthWeekDates(year, month) {
+    // First Monday on or before the 1st of month
+    const firstDay = new Date(year, month, 1)
+    const dow = firstDay.getDay() // 0=Sun
+    const offset = dow === 0 ? -6 : 1 - dow
+    const start = new Date(year, month, 1 + offset)
+    // Last Sunday on or after the last day of month
+    const lastDay = new Date(year, month + 1, 0)
+    const lastDow = lastDay.getDay()
+    const endOffset = lastDow === 0 ? 0 : 7 - lastDow
+    const end = new Date(year, month + 1, 0 + endOffset)
+    const weeks = []
+    const cur = new Date(start)
+    while (cur <= end) {
+      const week = Array.from({ length: 7 }, (_, i) => { const d = new Date(cur); d.setDate(cur.getDate() + i); return d })
+      weeks.push(week)
+      cur.setDate(cur.getDate() + 7)
+    }
+    return weeks
+  }
+
   function fmtDate(d) {
     return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
   }
@@ -80,9 +104,16 @@ export default function App() {
   useEffect(() => {
     if (!siteId) return
     setLoading(true)
-    const dates = weekDates(weekOffset)
-    const from  = fmtDate(dates[0])
-    const to    = fmtDate(dates[6])
+    let from, to
+    if (viewMode === 'month') {
+      const weeks = monthWeekDates(monthYear.year, monthYear.month)
+      from = fmtDate(weeks[0][0])
+      to   = fmtDate(weeks[weeks.length - 1][6])
+    } else {
+      const dates = weekDates(weekOffset)
+      from = fmtDate(dates[0])
+      to   = fmtDate(dates[6])
+    }
     const today = fmtDate(new Date())
     Promise.all([
       getEmployees(siteId),
@@ -95,13 +126,20 @@ export default function App() {
       setEmployees(emps); setShiftDefs(defs); setShifts(sh)
       setTemplates(tpls); setClockings(clk); setPositions(pos); setLoading(false)
     }).catch(err => { console.error(err); setLoading(false) })
-  }, [siteId, weekOffset])
+  }, [siteId, weekOffset, viewMode, monthYear])
 
   useEffect(() => {
     if (!siteId) return
     const sub1 = subscribeToShifts(siteId, () => {
-      const dates = weekDates(weekOffset)
-      getShiftsForWeek(siteId, fmtDate(dates[0]), fmtDate(dates[6])).then(setShifts).catch(console.error)
+      let from, to
+      if (viewMode === 'month') {
+        const weeks = monthWeekDates(monthYear.year, monthYear.month)
+        from = fmtDate(weeks[0][0]); to = fmtDate(weeks[weeks.length - 1][6])
+      } else {
+        const dates = weekDates(weekOffset)
+        from = fmtDate(dates[0]); to = fmtDate(dates[6])
+      }
+      getShiftsForWeek(siteId, from, to).then(setShifts).catch(console.error)
     })
     const sub2 = subscribeToClockings(siteId, () => {
       getClockingsForDate(siteId, fmtDate(new Date())).then(setClockings).catch(console.error)
@@ -132,12 +170,17 @@ export default function App() {
 
   const handleRefreshShifts = useCallback(async () => {
     if (!siteId) return
-    const dates = weekDates(weekOffset)
-    const from  = fmtDate(dates[0])
-    const to    = fmtDate(dates[6])
+    let from, to
+    if (viewMode === 'month') {
+      const weeks = monthWeekDates(monthYear.year, monthYear.month)
+      from = fmtDate(weeks[0][0]); to = fmtDate(weeks[weeks.length - 1][6])
+    } else {
+      const dates = weekDates(weekOffset)
+      from = fmtDate(dates[0]); to = fmtDate(dates[6])
+    }
     const sh = await getShiftsForWeek(siteId, from, to)
     setShifts(sh)
-  }, [siteId, weekOffset])
+  }, [siteId, weekOffset, viewMode, monthYear])
 
   const handleSaveTemplate = useCallback(async (name, slotsArray) => {
     try {
@@ -317,6 +360,9 @@ export default function App() {
                 <Planning site={site} employees={employees} shiftDefs={shiftDefs}
                   shifts={shifts} templates={templates}
                   weekOffset={weekOffset} setWeekOffset={setWeekOffset}
+                  viewMode={viewMode} setViewMode={setViewMode}
+                  monthYear={monthYear} setMonthYear={setMonthYear}
+                  monthWeekDates={monthWeekDates}
                   onDropShift={handleDropShift} onDeleteShift={handleDeleteShift}
                   onSaveTemplate={handleSaveTemplate}
                   onRefreshShifts={handleRefreshShifts}

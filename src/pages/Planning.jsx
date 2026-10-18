@@ -3,9 +3,10 @@ import { supabase } from '../lib/supabase'
 import { checkShift, shiftDuration, isHoliday, isSunday } from '../lib/lgav'
 
 const FR_DAYS   = ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim']
-const FR_MONTHS = ['jan','fév','mar','avr','mai','jun','jul','aoû','sep','oct','nov','déc']
+const FR_MONTHS      = ['jan','fév','mar','avr','mai','jun','jul','aoû','sep','oct','nov','déc']
+const FR_MONTHS_LONG = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre']
 
-export default function Planning({ site, employees, shiftDefs, shifts, templates, weekOffset, setWeekOffset, onDropShift, onDeleteShift, onSaveTemplate, onRefreshShifts, weekDates, fmtDate }) {
+export default function Planning({ site, employees, shiftDefs, shifts, templates, weekOffset, setWeekOffset, viewMode, setViewMode, monthYear, setMonthYear, monthWeekDates, onDropShift, onDeleteShift, onSaveTemplate, onRefreshShifts, weekDates, fmtDate }) {
   const [dragSource, setDragSource]   = useState(null)
   const dragRef = useRef(null)
   const [dropTarget, setDropTarget]   = useState(null)
@@ -281,130 +282,93 @@ export default function Planning({ site, employees, shiftDefs, shifts, templates
         </div>
       )}
 
-      {/* Week nav */}
+      {/* Nav bar */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 20px', background: 'var(--bg2)', borderBottom: '1px solid var(--border2)', flexShrink: 0 }}>
-        <button onClick={() => setWeekOffset(w => w-1)} style={wkBtnStyle}>‹</button>
-        <button onClick={() => setWeekOffset(0)} style={{ ...wkBtnStyle, width: 'auto', height: 'auto', background: 'var(--accent-dim)', border: '1px solid var(--accent)', color: 'var(--accent)', padding: '4px 12px', fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}>Aujourd'hui</button>
-        <button onClick={() => setWeekOffset(w => w+1)} style={wkBtnStyle}>›</button>
-        <div>
-          <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 14 }}>
-            Semaine {getISOWeek(dates[0])} — {dates[0].getFullYear()}
-          </div>
-          <div style={{ fontSize: 12, color: 'var(--fg2)' }}>
-            {dates[0].getDate()} {FR_MONTHS[dates[0].getMonth()]} → {dates[6].getDate()} {FR_MONTHS[dates[6].getMonth()]}
-          </div>
+
+        {/* View toggle */}
+        <div style={{ display: 'flex', background: 'var(--bg3)', borderRadius: 8, padding: 2, gap: 2, flexShrink: 0 }}>
+          <button onClick={() => setViewMode('week')} style={{ padding: '4px 12px', borderRadius: 6, border: 'none', cursor: 'pointer', fontSize: 11, fontWeight: 600, background: viewMode === 'week' ? 'var(--bg2)' : 'transparent', color: viewMode === 'week' ? 'var(--fg)' : 'var(--fg3)', boxShadow: viewMode === 'week' ? '0 1px 3px rgba(0,0,0,.2)' : 'none' }}>Semaine</button>
+          <button onClick={() => setViewMode('month')} style={{ padding: '4px 12px', borderRadius: 6, border: 'none', cursor: 'pointer', fontSize: 11, fontWeight: 600, background: viewMode === 'month' ? 'var(--bg2)' : 'transparent', color: viewMode === 'month' ? 'var(--fg)' : 'var(--fg3)', boxShadow: viewMode === 'month' ? '0 1px 3px rgba(0,0,0,.2)' : 'none' }}>Mois</button>
         </div>
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: 20, fontSize: 12, color: 'var(--fg2)' }}>
-          <span>Total : <strong style={{ color: 'var(--fg)' }}>{getWeekTotal().toFixed(0)}h</strong></span>
-          <span>Shifts : <strong style={{ color: 'var(--fg)' }}>{getShiftCount()}</strong></span>
-        </div>
+
+        {viewMode === 'week' ? (<>
+          <button onClick={() => setWeekOffset(w => w-1)} style={wkBtnStyle}>‹</button>
+          <button onClick={() => setWeekOffset(0)} style={{ ...wkBtnStyle, width: 'auto', height: 'auto', background: 'var(--accent-dim)', border: '1px solid var(--accent)', color: 'var(--accent)', padding: '4px 12px', fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}>Aujourd'hui</button>
+          <button onClick={() => setWeekOffset(w => w+1)} style={wkBtnStyle}>›</button>
+          <div>
+            <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 14 }}>
+              Semaine {getISOWeek(dates[0])} — {dates[0].getFullYear()}
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--fg2)' }}>
+              {dates[0].getDate()} {FR_MONTHS[dates[0].getMonth()]} → {dates[6].getDate()} {FR_MONTHS[dates[6].getMonth()]}
+            </div>
+          </div>
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: 20, fontSize: 12, color: 'var(--fg2)' }}>
+            <span>Total : <strong style={{ color: 'var(--fg)' }}>{getWeekTotal().toFixed(0)}h</strong></span>
+            <span>Shifts : <strong style={{ color: 'var(--fg)' }}>{getShiftCount()}</strong></span>
+          </div>
+        </>) : (<>
+          <button onClick={() => setMonthYear(m => { const d = new Date(m.year, m.month - 1); return { year: d.getFullYear(), month: d.getMonth() } })} style={wkBtnStyle}>‹</button>
+          <button onClick={() => { const n = new Date(); setMonthYear({ year: n.getFullYear(), month: n.getMonth() }) }} style={{ ...wkBtnStyle, width: 'auto', height: 'auto', background: 'var(--accent-dim)', border: '1px solid var(--accent)', color: 'var(--accent)', padding: '4px 12px', fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}>Ce mois</button>
+          <button onClick={() => setMonthYear(m => { const d = new Date(m.year, m.month + 1); return { year: d.getFullYear(), month: d.getMonth() } })} style={wkBtnStyle}>›</button>
+          <div>
+            <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 14 }}>
+              {FR_MONTHS_LONG[monthYear.month]} {monthYear.year}
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--fg2)' }}>
+              {monthWeekDates && monthWeekDates(monthYear.year, monthYear.month).length} semaines
+            </div>
+          </div>
+        </>)}
       </div>
 
       {/* Grid */}
       <div style={{ flex: 1, overflow: 'auto' }}>
-        <div style={{ minWidth: 900 }}>
-          {/* Header */}
-          <div style={{ display: 'grid', gridTemplateColumns: '160px repeat(7, 1fr) 56px', position: 'sticky', top: 0, zIndex: 10, background: 'var(--bg2)', borderBottom: '1px solid var(--border)' }}>
-            <div style={{ padding: '8px 16px', fontSize: 10, fontFamily: "'Syne',sans-serif", fontWeight: 700, letterSpacing: 1, color: 'var(--fg3)', textTransform: 'uppercase' }}>EMPLOYÉ</div>
-            {dates.map((d, i) => {
-              const ds  = fmtDate(d)
-              const sun = isSunday(ds)
-              const hol = isHoliday(ds)
-              return (
-                <div key={i} style={{ padding: '8px 6px', textAlign: 'center', borderLeft: '1px solid var(--border2)' }}>
-                  <div style={{ fontSize: 10, fontFamily: "'Syne',sans-serif", fontWeight: 700, letterSpacing: '.8px', textTransform: 'uppercase', color: sun ? '#f59e0b' : 'var(--fg2)' }}>{FR_DAYS[i]}</div>
-                  <div style={{ fontSize: 18, fontWeight: 700, lineHeight: 1.2, marginTop: 1, color: ds === today ? 'var(--accent)' : sun ? '#f59e0b' : 'var(--fg)' }}>{d.getDate()}</div>
-                  {hol && <div style={{ fontSize: 9, color: '#ec4899', letterSpacing: .5 }}>FÉRIÉ</div>}
+        {viewMode === 'week' ? (
+          <WeekGrid
+            dates={dates} today={today} employees={employees} shifts={shifts}
+            shiftDefs={shiftDefs} dropTarget={dropTarget}
+            getShifts={getShifts} getEmpWeekHours={getEmpWeekHours}
+            getUnassignedShifts={getUnassignedShifts}
+            onCellDragOver={onCellDragOver} onCellDragLeave={onCellDragLeave}
+            onCellDrop={onCellDrop} onUnassignedDrop={onUnassignedDrop}
+            onAssignedDragStart={onAssignedDragStart} onDeleteShift={onDeleteShift}
+            openModal={openModal} setDropTarget={setDropTarget} fmtDate={fmtDate}
+          />
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'row', height: '100%' }}>
+            {monthWeekDates && monthWeekDates(monthYear.year, monthYear.month).map((weekDays, wi) => (
+              <div key={wi} style={{ flexShrink: 0, borderRight: '2px solid var(--border)', display: 'flex', flexDirection: 'column' }}>
+                {/* Week label */}
+                <div style={{ padding: '6px 16px', background: 'color-mix(in srgb, var(--accent) 8%, var(--bg2))', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+                  <span style={{ fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 13, color: 'var(--accent)' }}>S{getISOWeek(weekDays[0])}</span>
+                  <span style={{ fontSize: 11, color: 'var(--fg2)' }}>{weekDays[0].getDate()} {FR_MONTHS[weekDays[0].getMonth()]} → {weekDays[6].getDate()} {FR_MONTHS[weekDays[6].getMonth()]}</span>
+                  {/* week total */}
+                  {(() => {
+                    const wkShifts = shifts.filter(s => { const d = s.work_date; return d >= fmtDate(weekDays[0]) && d <= fmtDate(weekDays[6]) })
+                    const total = wkShifts.reduce((a, s) => a + shiftDuration(s.start_time, s.end_time), 0)
+                    return total > 0 ? <span style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 700, color: 'var(--fg2)' }}>{total.toFixed(0)}h</span> : null
+                  })()}
                 </div>
-              )
-            })}
-            <div style={{ padding: '8px 4px', textAlign: 'center', borderLeft: '1px solid var(--border2)', fontSize: 10, fontFamily: "'Syne',sans-serif", fontWeight: 700, color: 'var(--fg3)' }}>H/SEM</div>
-          </div>
-
-          {/* Unassigned shifts row */}
-          <div style={{ display: 'grid', gridTemplateColumns: '160px repeat(7, 1fr) 56px', borderBottom: '2px solid var(--border)', background: 'color-mix(in srgb, var(--accent) 4%, var(--bg2))' }}>
-            <div style={{ padding: '8px 8px 8px 16px', display: 'flex', alignItems: 'center', borderRight: '1px solid var(--border2)', gap: 6 }}>
-              <span style={{ fontSize: 14 }}>📥</span>
-              <div>
-                <div style={{ fontSize: 11, fontWeight: 700, fontFamily: "'Syne',sans-serif", color: 'var(--accent)', whiteSpace: 'nowrap' }}>À donner</div>
-                <div style={{ fontSize: 9, color: 'var(--fg3)', marginTop: 1 }}>Glisser vers un employé</div>
-              </div>
-            </div>
-            {dates.map((d, di) => {
-              const ds = fmtDate(d)
-              const unassigned = getUnassignedShifts(ds)
-              const key = `unassigned_${ds}`
-              const isDrop = dropTarget === key
-              return (
-                <div key={di}
-                  onDragOver={e => { e.preventDefault(); setDropTarget(key) }}
-                  onDragLeave={() => setDropTarget(null)}
-                  onDrop={e => onUnassignedDrop(e, ds)}
-                  style={{
-                    padding: 4, borderLeft: '1px solid var(--border2)', minHeight: 48,
-                    background: isDrop ? 'color-mix(in srgb, var(--accent) 15%, var(--bg))' : 'transparent',
-                    outline: isDrop ? '2px dashed var(--accent)' : 'none', outlineOffset: -3, borderRadius: isDrop ? 4 : 0,
-                    display: 'flex', flexDirection: 'column', gap: 3,
-                  }}>
-                  {unassigned.map(shift => (
-                    <UnassignedChip key={shift.id} shift={shift} onDelete={() => onDeleteShift(shift.id)} onDragStart={e => onAssignedDragStart(e, shift)} />
-                  ))}
-                </div>
-              )
-            })}
-            <div style={{ borderLeft: '1px solid var(--border2)' }} />
-          </div>
-
-          {/* Rows */}
-          {employees.map(emp => {
-            const wh = getEmpWeekHours(emp.id)
-            return (
-              <div key={emp.id} style={{ display: 'grid', gridTemplateColumns: '160px repeat(7, 1fr) 56px', borderBottom: '1px solid var(--border2)' }}>
-                <div style={{ padding: '10px 8px 10px 16px', display: 'flex', flexDirection: 'column', justifyContent: 'center', borderRight: '1px solid var(--border2)' }}>
-                  <div style={{ fontWeight: 600, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{emp.first_name} {emp.last_name}</div>
-                  <div style={{ fontSize: 11, color: 'var(--fg2)', marginTop: 1 }}>{emp.role}</div>
-                  <div style={{ fontSize: 10, color: 'var(--fg3)', marginTop: 2 }}>{emp.contract_pct}%</div>
-                </div>
-                {dates.map((d, di) => {
-                  const ds     = fmtDate(d)
-                  const dayShifts = getShifts(emp.id, ds)
-                  const key    = `${emp.id}_${ds}`
-                  const isDrop = dropTarget === key
-                  const sun    = isSunday(ds)
-                  const hol    = isHoliday(ds)
-                  return (
-                    <div key={di}
-                      onDragOver={e => onCellDragOver(e, emp.id, ds)}
-                      onDragLeave={onCellDragLeave}
-                      onDrop={e => onCellDrop(e, emp.id, ds)}
-                      style={{
-                        padding: 4, borderLeft: '1px solid var(--border2)', position: 'relative', minHeight: 68,
-                        background: isDrop ? 'color-mix(in srgb, var(--accent) 12%, var(--bg))' : sun ? 'color-mix(in srgb, #f59e0b 4%, var(--bg))' : hol ? 'color-mix(in srgb, #ec4899 5%, var(--bg))' : ds === today ? 'color-mix(in srgb, var(--accent) 3%, var(--bg))' : 'transparent',
-                        outline: isDrop ? '2px dashed var(--accent)' : 'none', outlineOffset: -3, borderRadius: isDrop ? 4 : 0,
-                        display: 'flex', flexDirection: 'column', gap: 3,
-                      }}>
-                      {dayShifts.map(shift => (
-                        <AssignedChip key={shift.id} shift={shift} onDelete={() => onDeleteShift(shift.id)} onDragStart={e => onAssignedDragStart(e, shift)} />
-                      ))}
-                      <div onClick={() => openModal(emp.id, ds)}
-                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--fg3)', fontSize: 16, borderRadius: 6, border: '1px dashed var(--border2)', cursor: 'pointer', opacity: dayShifts.length > 0 ? 0.25 : 0.4, transition: 'opacity .15s', minHeight: dayShifts.length > 0 ? 22 : 52 }}
-                        onMouseEnter={e => e.currentTarget.style.opacity=1}
-                        onMouseLeave={e => e.currentTarget.style.opacity= dayShifts.length > 0 ? 0.25 : 0.4}>
-                        +
-                      </div>
-                    </div>
-                  )
-                })}
-                <div style={{ borderLeft: '1px solid var(--border2)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 4 }}>
-                  <div style={{ fontFamily: "'Syne',sans-serif", fontSize: 15, fontWeight: 700, color: wh > 45 ? '#f85149' : wh > 40 ? '#f59e0b' : wh > 0 ? '#3fb950' : 'var(--fg3)' }}>
-                    {wh > 0 ? `${wh.toFixed(0)}h` : '–'}
-                  </div>
-                  {wh > 45 && <div style={{ fontSize: 9, color: '#f85149' }}>MAX!</div>}
+                <div style={{ overflow: 'auto', flex: 1 }}>
+                  <WeekGrid
+                    dates={weekDays} today={today} employees={employees} shifts={shifts}
+                    shiftDefs={shiftDefs} dropTarget={dropTarget}
+                    getShifts={getShifts} getEmpWeekHours={(empId) => {
+                      return shifts.filter(s => s.employee_id === empId && s.work_date >= fmtDate(weekDays[0]) && s.work_date <= fmtDate(weekDays[6]))
+                        .reduce((acc, s) => acc + shiftDuration(s.start_time, s.end_time), 0)
+                    }}
+                    getUnassignedShifts={getUnassignedShifts}
+                    onCellDragOver={onCellDragOver} onCellDragLeave={onCellDragLeave}
+                    onCellDrop={onCellDrop} onUnassignedDrop={onUnassignedDrop}
+                    onAssignedDragStart={onAssignedDragStart} onDeleteShift={onDeleteShift}
+                    openModal={openModal} setDropTarget={setDropTarget} fmtDate={fmtDate}
+                  />
                 </div>
               </div>
-            )
-          })}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* ── Barre plans de travail ── */}
@@ -609,6 +573,115 @@ export default function Planning({ site, employees, shiftDefs, shifts, templates
     </div>
   )
 }
+
+function WeekGrid({ dates, today, employees, shifts, shiftDefs, dropTarget, getShifts, getEmpWeekHours, getUnassignedShifts, onCellDragOver, onCellDragLeave, onCellDrop, onUnassignedDrop, onAssignedDragStart, onDeleteShift, openModal, setDropTarget, fmtDate }) {
+  return (
+    <div style={{ minWidth: 900 }}>
+      {/* Header */}
+      <div style={{ display: 'grid', gridTemplateColumns: '160px repeat(7, 1fr) 56px', position: 'sticky', top: 0, zIndex: 10, background: 'var(--bg2)', borderBottom: '1px solid var(--border)' }}>
+        <div style={{ padding: '8px 16px', fontSize: 10, fontFamily: "'Syne',sans-serif", fontWeight: 700, letterSpacing: 1, color: 'var(--fg3)', textTransform: 'uppercase' }}>EMPLOYÉ</div>
+        {dates.map((d, i) => {
+          const ds  = fmtDate(d)
+          const sun = isSunday(ds)
+          const hol = isHoliday(ds)
+          return (
+            <div key={i} style={{ padding: '8px 6px', textAlign: 'center', borderLeft: '1px solid var(--border2)' }}>
+              <div style={{ fontSize: 10, fontFamily: "'Syne',sans-serif", fontWeight: 700, letterSpacing: '.8px', textTransform: 'uppercase', color: sun ? '#f59e0b' : 'var(--fg2)' }}>{FR_DAYS[i]}</div>
+              <div style={{ fontSize: 18, fontWeight: 700, lineHeight: 1.2, marginTop: 1, color: ds === today ? 'var(--accent)' : sun ? '#f59e0b' : 'var(--fg)' }}>{d.getDate()}</div>
+              {hol && <div style={{ fontSize: 9, color: '#ec4899', letterSpacing: .5 }}>FÉRIÉ</div>}
+            </div>
+          )
+        })}
+        <div style={{ padding: '8px 4px', textAlign: 'center', borderLeft: '1px solid var(--border2)', fontSize: 10, fontFamily: "'Syne',sans-serif", fontWeight: 700, color: 'var(--fg3)' }}>H/SEM</div>
+      </div>
+
+      {/* Unassigned shifts row */}
+      <div style={{ display: 'grid', gridTemplateColumns: '160px repeat(7, 1fr) 56px', borderBottom: '2px solid var(--border)', background: 'color-mix(in srgb, var(--accent) 4%, var(--bg2))' }}>
+        <div style={{ padding: '8px 8px 8px 16px', display: 'flex', alignItems: 'center', borderRight: '1px solid var(--border2)', gap: 6 }}>
+          <span style={{ fontSize: 14 }}>📥</span>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 700, fontFamily: "'Syne',sans-serif", color: 'var(--accent)', whiteSpace: 'nowrap' }}>À donner</div>
+            <div style={{ fontSize: 9, color: 'var(--fg3)', marginTop: 1 }}>Glisser vers un employé</div>
+          </div>
+        </div>
+        {dates.map((d, di) => {
+          const ds = fmtDate(d)
+          const unassigned = getUnassignedShifts(ds)
+          const key = `unassigned_${ds}`
+          const isDrop = dropTarget === key
+          return (
+            <div key={di}
+              onDragOver={e => { e.preventDefault(); setDropTarget(key) }}
+              onDragLeave={() => setDropTarget(null)}
+              onDrop={e => onUnassignedDrop(e, ds)}
+              style={{
+                padding: 4, borderLeft: '1px solid var(--border2)', minHeight: 48,
+                background: isDrop ? 'color-mix(in srgb, var(--accent) 15%, var(--bg))' : 'transparent',
+                outline: isDrop ? '2px dashed var(--accent)' : 'none', outlineOffset: -3, borderRadius: isDrop ? 4 : 0,
+                display: 'flex', flexDirection: 'column', gap: 3,
+              }}>
+              {unassigned.map(shift => (
+                <UnassignedChip key={shift.id} shift={shift} onDelete={() => onDeleteShift(shift.id)} onDragStart={e => onAssignedDragStart(e, shift)} />
+              ))}
+            </div>
+          )
+        })}
+        <div style={{ borderLeft: '1px solid var(--border2)' }} />
+      </div>
+
+      {/* Rows */}
+      {employees.map(emp => {
+        const wh = getEmpWeekHours(emp.id)
+        return (
+          <div key={emp.id} style={{ display: 'grid', gridTemplateColumns: '160px repeat(7, 1fr) 56px', borderBottom: '1px solid var(--border2)' }}>
+            <div style={{ padding: '10px 8px 10px 16px', display: 'flex', flexDirection: 'column', justifyContent: 'center', borderRight: '1px solid var(--border2)' }}>
+              <div style={{ fontWeight: 600, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{emp.first_name} {emp.last_name}</div>
+              <div style={{ fontSize: 11, color: 'var(--fg2)', marginTop: 1 }}>{emp.role}</div>
+              <div style={{ fontSize: 10, color: 'var(--fg3)', marginTop: 2 }}>{emp.contract_pct}%</div>
+            </div>
+            {dates.map((d, di) => {
+              const ds     = fmtDate(d)
+              const dayShifts = getShifts(emp.id, ds)
+              const key    = `${emp.id}_${ds}`
+              const isDrop = dropTarget === key
+              const sun    = isSunday(ds)
+              const hol    = isHoliday(ds)
+              return (
+                <div key={di}
+                  onDragOver={e => onCellDragOver(e, emp.id, ds)}
+                  onDragLeave={onCellDragLeave}
+                  onDrop={e => onCellDrop(e, emp.id, ds)}
+                  style={{
+                    padding: 4, borderLeft: '1px solid var(--border2)', position: 'relative', minHeight: 68,
+                    background: isDrop ? 'color-mix(in srgb, var(--accent) 12%, var(--bg))' : sun ? 'color-mix(in srgb, #f59e0b 4%, var(--bg))' : hol ? 'color-mix(in srgb, #ec4899 5%, var(--bg))' : ds === today ? 'color-mix(in srgb, var(--accent) 3%, var(--bg))' : 'transparent',
+                    outline: isDrop ? '2px dashed var(--accent)' : 'none', outlineOffset: -3, borderRadius: isDrop ? 4 : 0,
+                    display: 'flex', flexDirection: 'column', gap: 3,
+                  }}>
+                  {dayShifts.map(shift => (
+                    <AssignedChip key={shift.id} shift={shift} onDelete={() => onDeleteShift(shift.id)} onDragStart={e => onAssignedDragStart(e, shift)} />
+                  ))}
+                  <div onClick={() => openModal(emp.id, ds)}
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--fg3)', fontSize: 16, borderRadius: 6, border: '1px dashed var(--border2)', cursor: 'pointer', opacity: dayShifts.length > 0 ? 0.25 : 0.4, transition: 'opacity .15s', minHeight: dayShifts.length > 0 ? 22 : 52 }}
+                    onMouseEnter={e => e.currentTarget.style.opacity=1}
+                    onMouseLeave={e => e.currentTarget.style.opacity= dayShifts.length > 0 ? 0.25 : 0.4}>
+                    +
+                  </div>
+                </div>
+              )
+            })}
+            <div style={{ borderLeft: '1px solid var(--border2)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 4 }}>
+              <div style={{ fontFamily: "'Syne',sans-serif", fontSize: 15, fontWeight: 700, color: wh > 45 ? '#f85149' : wh > 40 ? '#f59e0b' : wh > 0 ? '#3fb950' : 'var(--fg3)' }}>
+                {wh > 0 ? `${wh.toFixed(0)}h` : '–'}
+              </div>
+              {wh > 45 && <div style={{ fontSize: 9, color: '#f85149' }}>MAX!</div>}
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 
 function TimeInput({ value, onChange }) {
   const [h, m] = (value || '00:00').split(':')
