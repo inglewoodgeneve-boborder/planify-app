@@ -206,9 +206,21 @@ export default function App() {
     catch (err) { showToast('Erreur : ' + err.message, 'error') }
   }, [showToast])
 
-  const handleRefreshShifts = useCallback(() => {
-    setShiftsRefreshKey(k => k + 1)
-  }, [])
+  const handleRefreshShifts = useCallback(async () => {
+    if (!siteId) return
+    let from, to
+    if (activePeriod) {
+      from = activePeriod.date_from; to = activePeriod.date_to
+    } else if (viewMode === 'month') {
+      const weeks = monthWeekDates(monthYear.year, monthYear.month)
+      from = fmtDate(weeks[0][0]); to = fmtDate(weeks[weeks.length - 1][6])
+    } else {
+      const dates = weekDates(weekOffset)
+      from = fmtDate(dates[0]); to = fmtDate(dates[6])
+    }
+    const fresh = await getShiftsForWeek(siteId, from, to)
+    setShifts(fresh)
+  }, [siteId, activePeriod, viewMode, weekOffset, monthYear, monthWeekDates, weekDates, fmtDate])
 
   // Persist navigation state to localStorage
   useEffect(() => { localStorage.setItem('pfy_view', view) }, [view])
