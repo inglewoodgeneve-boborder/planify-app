@@ -30,6 +30,7 @@ export default function Planning({ site, employees, shiftDefs, shifts, templates
   const [pName, setPName]               = useState('')
   const [pFrom, setPFrom]               = useState('')
   const [pTo, setPTo]                   = useState('')
+  const [pWorkPlan, setPWorkPlan]        = useState('')
   const [generateModal, setGenerateModal] = useState(null) // { plan, planShifts }
   const [generating, setGenerating]     = useState(false)
 
@@ -253,7 +254,59 @@ export default function Planning({ site, employees, shiftDefs, shifts, templates
   async function confirmCreatePeriod() {
     if (!pName.trim() || !pFrom || !pTo) return
     const p = await onCreatePeriod({ name: pName.trim(), date_from: pFrom, date_to: pTo })
-    if (p) { setActivePeriod(p); setPeriodModal(false) }
+    if (!p) return
+
+    // Apply work plan to all weeks in the period if selected
+    if (pWorkPlan) {
+      const plan = workPlans.find(wp => wp.id === pWorkPlan)
+      if (plan) {
+        const { data: planShifts } = await supabase.from('work_plan_shifts')
+          .select('*, shift_defs(*)').eq('work_plan_id', plan.id).order('day_of_week')
+
+        if (planShifts && planShifts.length > 0) {
+          // Generate all weeks between date_from and date_to
+          const start = new Date(pFrom + 'T00:00:00')
+          const end   = new Date(pTo   + 'T00:00:00')
+          // Get Monday of start week
+          const startDay = start.getDay() // 0=Sun
+          const mondayOffset = startDay === 0 ? -6 : 1 - startDay
+          const firstMonday = new Date(start)
+          firstMonday.setDate(firstMonday.getDate() + mondayOffset)
+
+          const rows = []
+          let weekStart = new Date(firstMonday)
+          while (weekStart <= end) {
+            for (const ps of planShifts) {
+              const def = ps.shift_defs
+              if (!def) continue
+              const date = new Date(weekStart)
+              date.setDate(date.getDate() + (ps.day_of_week || 0))
+              if (date < start || date > end) continue
+              const dateStr = date.toISOString().split('T')[0]
+              for (let i = 0; i < (ps.quantity || 1); i++) {
+                rows.push({
+                  site_id: site?.id || null,
+                  employee_id: null,
+                  shift_def_id: def.id,
+                  work_date: dateStr,
+                  start_time: def.start_time || null,
+                  end_time: def.end_time || null,
+                  status: 'draft',
+                })
+              }
+            }
+            weekStart.setDate(weekStart.getDate() + 7)
+          }
+
+          if (rows.length > 0) {
+            await supabase.from('shifts').insert(rows)
+          }
+        }
+      }
+    }
+
+    setActivePeriod(p)
+    setPeriodModal(false)
   }
 
   // ── Period home screen ─────────────────────────────────────────
@@ -267,7 +320,7 @@ export default function Planning({ site, employees, shiftDefs, shifts, templates
               <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 22 }}>Planning</div>
               <div style={{ fontSize: 13, color: 'var(--fg2)', marginTop: 4 }}>Sélectionne une période pour commencer à planifier</div>
             </div>
-            <button onClick={() => { setPName(''); setPFrom(''); setPTo(''); setPeriodModal(true) }}
+            <button onClick={() => { setPName(''); setPFrom(''); setPTo(''); setPWorkPlan(''); setPeriodModal(true) }}
               style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--accent)', border: 'none', color: '#fff', padding: '10px 18px', borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: "'Syne',sans-serif" }}>
               + Nouvelle période
             </button>
@@ -281,7 +334,7 @@ export default function Planning({ site, employees, shiftDefs, shifts, templates
               <div style={{ fontSize: 48, opacity: .3 }}>📅</div>
               <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 18, color: 'var(--fg2)' }}>Aucune période</div>
               <div style={{ fontSize: 13, color: 'var(--fg3)', textAlign: 'center', maxWidth: 320 }}>Crée ta première période de planning — par exemple "Novembre 2026" avec les dates du 27 oct au 30 nov.</div>
-              <button onClick={() => { setPName(''); setPFrom(''); setPTo(''); setPeriodModal(true) }}
+              <button onClick={() => { setPName(''); setPFrom(''); setPTo(''); setPWorkPlan(''); setPeriodModal(true) }}
                 style={{ marginTop: 8, background: 'var(--accent)', border: 'none', color: '#fff', padding: '10px 20px', borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
                 + Créer une période
               </button>
@@ -324,7 +377,7 @@ export default function Planning({ site, employees, shiftDefs, shifts, templates
               <input autoFocus value={pName} onChange={e => setPName(e.target.value)}
                 placeholder="Ex: Novembre 2026, Hiver S44–S48…"
                 style={{ width: '100%', background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--fg)', padding: '9px 12px', borderRadius: 8, fontSize: 13, outline: 'none', marginBottom: 16, boxSizing: 'border-box' }} />
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 24 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
                 <div>
                   <label style={{ fontSize: 11, color: 'var(--fg2)', fontWeight: 600, display: 'block', marginBottom: 5 }}>Du</label>
                   <input type="date" value={pFrom} onChange={e => setPFrom(e.target.value)}
@@ -336,6 +389,25 @@ export default function Planning({ site, employees, shiftDefs, shifts, templates
                     style={{ width: '100%', background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--fg)', padding: '9px 10px', borderRadius: 8, fontSize: 13, outline: 'none', boxSizing: 'border-box' }} />
                 </div>
               </div>
+              {workPlans.length > 0 && (
+                <div style={{ marginBottom: 24 }}>
+                  <label style={{ fontSize: 11, color: 'var(--fg2)', fontWeight: 600, display: 'block', marginBottom: 5 }}>
+                    Plan de travail à appliquer <span style={{ fontWeight: 400, color: 'var(--fg3)' }}>(optionnel)</span>
+                  </label>
+                  <select value={pWorkPlan} onChange={e => setPWorkPlan(e.target.value)}
+                    style={{ width: '100%', background: 'var(--bg)', border: '1px solid var(--border)', color: pWorkPlan ? 'var(--fg)' : 'var(--fg3)', padding: '9px 10px', borderRadius: 8, fontSize: 13, outline: 'none', boxSizing: 'border-box', cursor: 'pointer' }}>
+                    <option value="">— Aucun —</option>
+                    {workPlans.map(wp => (
+                      <option key={wp.id} value={wp.id}>{wp.name}</option>
+                    ))}
+                  </select>
+                  {pWorkPlan && pFrom && pTo && (
+                    <div style={{ fontSize: 11, color: 'var(--accent)', marginTop: 6 }}>
+                      ✓ Les shifts seront générés automatiquement sur toute la période
+                    </div>
+                  )}
+                </div>
+              )}
               <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                 <button onClick={() => setPeriodModal(false)} style={{ background: 'none', border: '1px solid var(--border)', color: 'var(--fg2)', padding: '8px 16px', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>Annuler</button>
                 <button onClick={confirmCreatePeriod} disabled={!pName.trim() || !pFrom || !pTo}
