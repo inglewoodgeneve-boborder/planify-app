@@ -284,7 +284,7 @@ export default function Planning({ site, employees, shiftDefs, shifts, templates
       {/* Week nav */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 20px', background: 'var(--bg2)', borderBottom: '1px solid var(--border2)', flexShrink: 0 }}>
         <button onClick={() => setWeekOffset(w => w-1)} style={wkBtnStyle}>‹</button>
-        <button onClick={() => setWeekOffset(0)} style={{ ...wkBtnStyle, background: 'var(--accent-dim)', border: '1px solid var(--accent)', color: 'var(--accent)', padding: '4px 10px', fontSize: 11, fontWeight: 600 }}>Aujourd'hui</button>
+        <button onClick={() => setWeekOffset(0)} style={{ ...wkBtnStyle, width: 'auto', height: 'auto', background: 'var(--accent-dim)', border: '1px solid var(--accent)', color: 'var(--accent)', padding: '4px 12px', fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}>Aujourd'hui</button>
         <button onClick={() => setWeekOffset(w => w+1)} style={wkBtnStyle}>›</button>
         <div>
           <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 14 }}>

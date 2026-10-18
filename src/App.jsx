@@ -335,6 +335,28 @@ export default function App() {
               )}
               {view === 'config' && (
                 <Config site={site} siteId={siteId} employees={employees} shiftDefs={shiftDefs} positions={positions}
+                  onCreateEmployee={async (data) => {
+                    const { data: e } = await supabase.from('employees').insert({ ...data, site_id: siteId }).select().single()
+                    if (e) setEmployees(prev => [...prev, e])
+                  }}
+                  onUpdateEmployee={async (id, data) => {
+                    const { data: e } = await supabase.from('employees').update(data).eq('id', id).select().single()
+                    if (e) setEmployees(prev => prev.map(x => x.id === id ? e : x))
+                  }}
+                  onDeleteEmployee={async (id) => {
+                    if (!confirm('Supprimer cet employé ?')) return
+                    await supabase.from('employees').delete().eq('id', id)
+                    setEmployees(prev => prev.filter(x => x.id !== id))
+                  }}
+                  onCreateShiftDef={async (data) => {
+                    const { data: d } = await supabase.from('shift_defs').insert({ ...data, site_id: siteId }).select().single()
+                    if (d) setShiftDefs(prev => [...prev, d])
+                  }}
+                  onDeleteShiftDef={async (id) => {
+                    if (!confirm('Supprimer ce type de shift ?')) return
+                    await supabase.from('shift_defs').delete().eq('id', id)
+                    setShiftDefs(prev => prev.filter(x => x.id !== id))
+                  }}
                   onCreatePosition={async (data) => {
                     const { data: p } = await supabase.from('positions').insert(data).select().single()
                     if (p) setPositions(prev => [...prev, p])
