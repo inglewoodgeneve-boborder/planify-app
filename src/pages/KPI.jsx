@@ -2,49 +2,64 @@ import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { shiftDuration } from '../lib/lgav'
 
-const FR_DAYS_LONG  = ['Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi','Dimanche']
+const FR_DAYS_LONG    = ['Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi','Dimanche']
+const FR_MONTHS_LONG  = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre']
 const FR_MONTHS_SHORT = ['jan','fév','mar','avr','mai','jun','jul','aoû','sep','oct','nov','déc']
 
-function fmt(d) {
-  return `${d.getDate()} ${FR_MONTHS_SHORT[d.getMonth()]}`
-}
 function dayOfWeek(dateStr) {
   const d = new Date(dateStr + 'T00:00:00')
   return (d.getDay() + 6) % 7 // 0=Mon … 6=Sun
 }
+function fmtShort(dateStr) {
+  const d = new Date(dateStr + 'T00:00:00')
+  return `${d.getDate()} ${FR_MONTHS_SHORT[d.getMonth()]}`
+}
+function daysInMonth(year, month) {
+  return new Date(year, month + 1, 0).getDate()
+}
 
-export default function KPI({ site, activePeriod, employees, shifts }) {
-  const [entries, setEntries]   = useState({}) // { dateStr: { id, ca_prevision, ca_reel } }
-  const [saving, setSaving]     = useState({}) // { dateStr_field: true }
-  const [loading, setLoading]   = useState(false)
+export default function KPI({ site, employees, shifts, onLoadShiftsForMonth }) {
+  const now = new Date()
+  const [year,  setYear]  = useState(now.getFullYear())
+  const [month, setMonth] = useState(now.getMonth()) // 0-based
+  const [entries, setEntries] = useState({}) // { dateStr: { id, ca_prevision, ca_reel } }
+  const [saving,  setSaving]  = useState({})
+  const [loading, setLoading] = useState(false)
 
-  // Build list of dates in the period
+  // Dates of the month
   const dates = (() => {
-    if (!activePeriod) return []
-    const arr = []
-    const cur = new Date(activePeriod.date_from + 'T00:00:00')
-    const end = new Date(activePeriod.date_to   + 'T00:00:00')
-    while (cur <= end) { arr.push(cur.toISOString().split('T')[0]); cur.setDate(cur.getDate() + 1) }
-    return arr
+    const n = daysInMonth(year, month)
+    return Array.from({ length: n }, (_, i) => {
+      const d = new Date(year, month, i + 1)
+      return d.toISOString().split('T')[0]
+    })
   })()
 
-  // Load kpi_entries for this period
+  const dateFrom = dates[0]
+  const dateTo   = dates[dates.length - 1]
+
+  // Ask parent to load shifts for this month
   useEffect(() => {
-    if (!activePeriod || !site?.id) return
+    if (onLoadShiftsForMonth) onLoadShiftsForMonth(dateFrom, dateTo)
+  }, [dateFrom, dateTo])
+
+  // Load kpi_entries for this month
+  useEffect(() => {
+    if (!site?.id) return
     setLoading(true)
     supabase.from('kpi_entries')
       .select('*')
       .eq('site_id', site.id)
-      .eq('period_id', activePeriod.id)
+      .gte('work_date', dateFrom)
+      .lte('work_date', dateTo)
       .then(({ data }) => {
         const map = {}
         ;(data || []).forEach(e => { map[e.work_date] = e })
         setEntries(map)
         setLoading(false)
       })
-  }, [activePeriod, site?.id])
+  }, [site?.id, dateFrom, dateTo])
 
-  // Upsert a field for a date
   const saveField = useCallback(async (dateStr, field, rawValue) => {
     const value = rawValue === '' ? null : parseFloat(rawValue)
     if (rawValue !== '' && isNaN(value)) return
@@ -58,40 +73,36 @@ export default function KPI({ site, activePeriod, employees, shifts }) {
       if (data) setEntries(e => ({ ...e, [dateStr]: data }))
     } else {
       const { data } = await supabase.from('kpi_entries')
-        .insert({ site_id: site.id, period_id: activePeriod.id, work_date: dateStr, [field]: value })
+        .insert({ site_id: site.id, work_date: dateStr, [field]: value })
         .select().single()
       if (data) setEntries(e => ({ ...e, [dateStr]: data }))
     }
     setSaving(s => { const n = { ...s }; delete n[key]; return n })
-  }, [entries, site?.id, activePeriod])
+  }, [entries, site?.id])
 
-  // Compute payroll for a date from shifts
   function getDayPayroll(dateStr) {
     const dayShifts = shifts.filter(s => s.work_date === dateStr && s.employee_id)
-    let total = 0
-    for (const s of dayShifts) {
+    return dayShifts.reduce((total, s) => {
       const emp = employees.find(e => e.id === s.employee_id)
-      if (!emp?.hourly_rate) continue
-      const hours = shiftDuration(s.start_time, s.end_time)
-      total += hours * emp.hourly_rate
-    }
-    return total
+      if (!emp?.hourly_rate) return total
+      return total + shiftDuration(s.start_time, s.end_time) * emp.hourly_rate
+    }, 0)
   }
 
-  // Totals
   const totals = dates.reduce((acc, d) => {
     const e = entries[d] || {}
-    acc.payroll    += getDayPayroll(d)
-    acc.prevision  += e.ca_prevision ? parseFloat(e.ca_prevision) : 0
-    acc.reel       += e.ca_reel      ? parseFloat(e.ca_reel)      : 0
+    acc.payroll   += getDayPayroll(d)
+    acc.prevision += e.ca_prevision ? parseFloat(e.ca_prevision) : 0
+    acc.reel      += e.ca_reel      ? parseFloat(e.ca_reel)      : 0
     return acc
   }, { payroll: 0, prevision: 0, reel: 0 })
 
-  if (!activePeriod) return (
-    <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--fg3)', fontSize: 14 }}>
-      Ouvre une période de planning pour voir les KPI
-    </div>
-  )
+  function navMonth(dir) {
+    let m = month + dir, y = year
+    if (m < 0)  { m = 11; y-- }
+    if (m > 11) { m = 0;  y++ }
+    setMonth(m); setYear(y)
+  }
 
   const inputStyle = {
     background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--fg)',
@@ -107,21 +118,32 @@ export default function KPI({ site, activePeriod, employees, shifts }) {
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
       {/* Header */}
-      <div style={{ padding: '16px 28px 12px', borderBottom: '1px solid var(--border2)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div>
-          <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 18 }}>KPI · {activePeriod.name}</div>
-          <div style={{ fontSize: 12, color: 'var(--fg3)', marginTop: 3 }}>{activePeriod.date_from} → {activePeriod.date_to} · {dates.length} jours</div>
+      <div style={{ padding: '14px 28px 12px', borderBottom: '1px solid var(--border2)', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+
+        {/* Month nav */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <button onClick={() => navMonth(-1)} style={{ background: 'var(--bg2)', border: '1px solid var(--border)', color: 'var(--fg2)', width: 30, height: 30, borderRadius: 8, cursor: 'pointer', fontSize: 14 }}>‹</button>
+          <div style={{ minWidth: 160, textAlign: 'center' }}>
+            <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 17 }}>{FR_MONTHS_LONG[month]} {year}</div>
+            <div style={{ fontSize: 11, color: 'var(--fg3)' }}>{dates.length} jours</div>
+          </div>
+          <button onClick={() => navMonth(1)}  style={{ background: 'var(--bg2)', border: '1px solid var(--border)', color: 'var(--fg2)', width: 30, height: 30, borderRadius: 8, cursor: 'pointer', fontSize: 14 }}>›</button>
+          <button onClick={() => { setYear(now.getFullYear()); setMonth(now.getMonth()) }}
+            style={{ background: 'var(--accent-dim,#1e3a5f)', border: '1px solid var(--accent)', color: 'var(--accent)', padding: '4px 12px', borderRadius: 8, cursor: 'pointer', fontSize: 11, fontWeight: 600 }}>
+            Ce mois
+          </button>
         </div>
+
         {/* Summary cards */}
-        <div style={{ display: 'flex', gap: 12 }}>
+        <div style={{ display: 'flex', gap: 10, marginLeft: 'auto', flexWrap: 'wrap' }}>
           {[
-            { label: 'Masse salariale', value: totals.payroll, color: '#f97316' },
+            { label: 'Masse salariale', value: totals.payroll,   color: '#f97316' },
             { label: 'CA prévisionnel', value: totals.prevision, color: 'var(--accent)' },
-            { label: 'CA réel', value: totals.reel, color: '#22c55e' },
+            { label: 'CA réel',         value: totals.reel,      color: '#22c55e' },
           ].map(c => (
-            <div key={c.label} style={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 10, padding: '10px 16px', minWidth: 130, textAlign: 'center' }}>
-              <div style={{ fontSize: 10, color: 'var(--fg3)', fontWeight: 600, marginBottom: 4, textTransform: 'uppercase', letterSpacing: .5 }}>{c.label}</div>
-              <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 18, color: c.color }}>
+            <div key={c.label} style={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 10, padding: '8px 14px', minWidth: 120, textAlign: 'center' }}>
+              <div style={{ fontSize: 10, color: 'var(--fg3)', fontWeight: 600, marginBottom: 3, textTransform: 'uppercase', letterSpacing: .5 }}>{c.label}</div>
+              <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 16, color: c.color }}>
                 {c.value > 0 ? `CHF ${c.value.toFixed(0)}` : '—'}
               </div>
               {c.label !== 'Masse salariale' && totals.payroll > 0 && c.value > 0 && (
@@ -141,7 +163,7 @@ export default function KPI({ site, activePeriod, employees, shifts }) {
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
-              <tr style={{ borderBottom: '2px solid var(--border)' }}>
+              <tr style={{ borderBottom: '2px solid var(--border)', position: 'sticky', top: 0, zIndex: 1 }}>
                 <th style={thStyle}>Jour</th>
                 <th style={thNum}>Shifts planifiés</th>
                 <th style={thNum}>Masse salariale</th>
@@ -152,53 +174,60 @@ export default function KPI({ site, activePeriod, employees, shifts }) {
             </thead>
             <tbody>
               {dates.map((dateStr, i) => {
-                const d   = new Date(dateStr + 'T00:00:00')
-                const dow = dayOfWeek(dateStr)
-                const isWE = dow >= 5
-                const entry = entries[dateStr] || {}
+                const dow    = dayOfWeek(dateStr)
+                const isWE   = dow >= 5
+                const entry  = entries[dateStr] || {}
                 const payroll = getDayPayroll(dateStr)
-                const caP  = entry.ca_prevision ? parseFloat(entry.ca_prevision) : null
-                const caR  = entry.ca_reel      ? parseFloat(entry.ca_reel)      : null
-                const ratio = payroll > 0 && caR > 0 ? (payroll / caR) * 100 : null
+                const caP    = entry.ca_prevision != null ? parseFloat(entry.ca_prevision) : null
+                const caR    = entry.ca_reel      != null ? parseFloat(entry.ca_reel)      : null
+                const ratio  = payroll > 0 && caR > 0 ? (payroll / caR) * 100 : null
                 const dayShifts = shifts.filter(s => s.work_date === dateStr && s.employee_id)
-                const rowBg = isWE ? 'color-mix(in srgb, var(--accent) 3%, var(--bg))' : i % 2 === 0 ? 'var(--bg)' : 'var(--bg2)'
+                const rowBg  = isWE
+                  ? 'color-mix(in srgb, var(--accent) 4%, var(--bg))'
+                  : i % 2 === 0 ? 'var(--bg)' : 'var(--bg2)'
 
                 return (
                   <tr key={dateStr} style={{ borderBottom: '1px solid var(--border)', background: rowBg }}>
                     <td style={cellStyle}>
-                      <div style={{ fontWeight: 600, color: isWE ? 'var(--accent)' : 'var(--fg)' }}>{FR_DAYS_LONG[dow]}</div>
-                      <div style={{ fontSize: 11, color: 'var(--fg3)' }}>{fmt(d)}</div>
-                    </td>
-                    <td style={numCell}>
-                      <div style={{ fontWeight: 600 }}>{dayShifts.length}</div>
-                      <div style={{ fontSize: 11, color: 'var(--fg3)' }}>
-                        {dayShifts.reduce((a, s) => a + shiftDuration(s.start_time, s.end_time), 0).toFixed(1)}h
+                      <div style={{ fontWeight: 600, color: isWE ? 'var(--accent)' : 'var(--fg)' }}>
+                        {FR_DAYS_LONG[dow]}
                       </div>
+                      <div style={{ fontSize: 11, color: 'var(--fg3)' }}>{fmtShort(dateStr)}</div>
                     </td>
                     <td style={numCell}>
-                      {payroll > 0 ? (
-                        <span style={{ fontWeight: 700, color: '#f97316' }}>CHF {payroll.toFixed(2)}</span>
+                      {dayShifts.length > 0 ? (
+                        <>
+                          <div style={{ fontWeight: 600 }}>{dayShifts.length}</div>
+                          <div style={{ fontSize: 11, color: 'var(--fg3)' }}>
+                            {dayShifts.reduce((a, s) => a + shiftDuration(s.start_time, s.end_time), 0).toFixed(1)}h
+                          </div>
+                        </>
                       ) : <span style={{ color: 'var(--fg3)' }}>—</span>}
+                    </td>
+                    <td style={numCell}>
+                      {payroll > 0
+                        ? <span style={{ fontWeight: 700, color: '#f97316' }}>CHF {payroll.toFixed(2)}</span>
+                        : <span style={{ color: 'var(--fg3)' }}>—</span>}
                     </td>
                     <td style={numCell}>
                       <input
                         type="number" min="0" step="10"
-                        defaultValue={entry.ca_prevision ?? ''}
-                        key={`${dateStr}_prev_${entry.ca_prevision}`}
-                        placeholder="0"
+                        defaultValue={caP ?? ''}
+                        key={`prev_${dateStr}_${caP}`}
+                        placeholder="—"
                         style={{ ...inputStyle, borderColor: saving[`${dateStr}_ca_prevision`] ? 'var(--accent)' : 'var(--border)' }}
-                        onBlur={e => saveField(dateStr, 'ca_prevision', e.target.value)}
+                        onBlur={e  => saveField(dateStr, 'ca_prevision', e.target.value)}
                         onKeyDown={e => e.key === 'Enter' && e.target.blur()}
                       />
                     </td>
                     <td style={numCell}>
                       <input
                         type="number" min="0" step="10"
-                        defaultValue={entry.ca_reel ?? ''}
-                        key={`${dateStr}_reel_${entry.ca_reel}`}
-                        placeholder="0"
+                        defaultValue={caR ?? ''}
+                        key={`reel_${dateStr}_${caR}`}
+                        placeholder="—"
                         style={{ ...inputStyle, borderColor: saving[`${dateStr}_ca_reel`] ? 'var(--accent)' : 'var(--border)' }}
-                        onBlur={e => saveField(dateStr, 'ca_reel', e.target.value)}
+                        onBlur={e  => saveField(dateStr, 'ca_reel', e.target.value)}
                         onKeyDown={e => e.key === 'Enter' && e.target.blur()}
                       />
                     </td>
@@ -213,10 +242,9 @@ export default function KPI({ site, activePeriod, employees, shifts }) {
                 )
               })}
             </tbody>
-            {/* Totals row */}
             <tfoot>
               <tr style={{ borderTop: '2px solid var(--border)', background: 'var(--bg2)', fontWeight: 700 }}>
-                <td style={cellStyle}>Total période</td>
+                <td style={cellStyle}>Total {FR_MONTHS_LONG[month]}</td>
                 <td style={numCell}>
                   {shifts.filter(s => s.employee_id && dates.includes(s.work_date)).length} shifts
                 </td>
@@ -224,7 +252,7 @@ export default function KPI({ site, activePeriod, employees, shifts }) {
                   <span style={{ color: '#f97316' }}>CHF {totals.payroll.toFixed(2)}</span>
                 </td>
                 <td style={numCell}>{totals.prevision > 0 ? `CHF ${totals.prevision.toFixed(0)}` : '—'}</td>
-                <td style={numCell}>{totals.reel > 0 ? `CHF ${totals.reel.toFixed(0)}` : '—'}</td>
+                <td style={numCell}>{totals.reel > 0      ? `CHF ${totals.reel.toFixed(0)}`      : '—'}</td>
                 <td style={{ ...numCell, borderRight: 'none' }}>
                   {totals.payroll > 0 && totals.reel > 0 ? (
                     <span style={{ color: (totals.payroll/totals.reel*100) > 35 ? '#ef4444' : (totals.payroll/totals.reel*100) > 28 ? '#f97316' : '#22c55e' }}>
