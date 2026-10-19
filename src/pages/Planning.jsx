@@ -9,7 +9,7 @@ const FR_MONTHS_LONG = ['Janvier','Février','Mars','Avril','Mai','Juin','Juille
 export default function Planning({ site, employees, shiftDefs, shifts, templates, weekOffset, setWeekOffset, viewMode, setViewMode, monthYear, setMonthYear, monthWeekDates, periods, activePeriod, setActivePeriod, onCreatePeriod, onDeletePeriod, onDropShift, onDeleteShift, onSaveTemplate, onRefreshShifts, weekDates, fmtDate, appLoading }) {
   const [dragSource, setDragSource]   = useState(null)
   const dragRef = useRef(null)
-  const [dropTarget, setDropTarget]   = useState(null)
+  const [dropTarget, setDropTarget]   = useState(null) // { key, side: 'left'|'right' } | null
   const [modal, setModal]             = useState(null)
   const [modalLabel, setModalLabel]   = useState('')
   const [modalStart, setModalStart]   = useState('08:00')
@@ -87,13 +87,18 @@ export default function Planning({ site, employees, shiftDefs, shifts, templates
   }
   function onCellDragOver(e, empId, dateStr) {
     e.preventDefault()
-    e.dataTransfer.dropEffect = dragRef.current?.type === 'assigned' ? 'move' : 'copy'
-    setDropTarget(`${empId}_${dateStr}`)
+    const rect = e.currentTarget.getBoundingClientRect()
+    const side = (e.clientX - rect.left) / rect.width < 0.5 ? 'left' : 'right'
+    const isCopy = dragRef.current?.type === 'assigned' && side === 'left'
+    e.dataTransfer.dropEffect = isCopy ? 'copy' : 'move'
+    setDropTarget({ key: `${empId}_${dateStr}`, side })
   }
   function onCellDragLeave() { setDropTarget(null) }
 
   async function onCellDrop(e, empId, dateStr) {
     e.preventDefault()
+    const rect = e.currentTarget.getBoundingClientRect()
+    const side = (e.clientX - rect.left) / rect.width < 0.5 ? 'left' : 'right'
     setDropTarget(null)
     const src = dragRef.current
     if (!src) return
@@ -106,7 +111,8 @@ export default function Planning({ site, employees, shiftDefs, shifts, templates
     } else if (src.type === 'assigned') {
       const s = src.shift
       if (s.employee_id === empId && s.work_date === dateStr) return
-      await onDeleteShift(s.id)
+      const isCopy = side === 'left'
+      if (!isCopy) await onDeleteShift(s.id) // move: remove original
       await onDropShift({ employeeId: empId, workDate: dateStr, shiftDefId: s.shift_def_id, startTime: s.start_time, endTime: s.end_time })
     }
     dragRef.current = null
@@ -115,11 +121,14 @@ export default function Planning({ site, employees, shiftDefs, shifts, templates
 
   async function onUnassignedDrop(e, dateStr) {
     e.preventDefault()
+    const rect = e.currentTarget.getBoundingClientRect()
+    const side = (e.clientX - rect.left) / rect.width < 0.5 ? 'left' : 'right'
     setDropTarget(null)
     const src = dragRef.current
     if (!src) return
     if (src.type === 'assigned' && src.shift.employee_id) {
-      await onDeleteShift(src.shift.id)
+      const isCopy = side === 'left'
+      if (!isCopy) await onDeleteShift(src.shift.id)
       await onDropShift({ employeeId: null, workDate: dateStr, shiftDefId: src.shift.shift_def_id, startTime: src.shift.start_time, endTime: src.shift.end_time })
     } else if (src.type === 'palette' || src.type === 'imported') {
       const def = src.def
@@ -577,18 +586,20 @@ function WeekGrid({ dates, today, employees, shifts, shiftDefs, dropTarget, getS
           const ds = fmtDate(d)
           const unassigned = getUnassignedShifts(ds)
           const key = `unassigned_${ds}`
-          const isDrop = dropTarget === key
+          const isDrop = dropTarget?.key === key
+          const dropSide = dropTarget?.side
           return (
             <div key={di}
-              onDragOver={e => { e.preventDefault(); setDropTarget(key) }}
+              onDragOver={e => { e.preventDefault(); const rect = e.currentTarget.getBoundingClientRect(); const side = (e.clientX - rect.left) / rect.width < 0.5 ? 'left' : 'right'; setDropTarget({ key, side }) }}
               onDragLeave={() => setDropTarget(null)}
               onDrop={e => onUnassignedDrop(e, ds)}
               style={{
-                padding: 4, borderLeft: '1px solid var(--border2)', minHeight: 48,
-                background: isDrop ? 'color-mix(in srgb, var(--accent) 15%, var(--bg))' : 'transparent',
-                outline: isDrop ? '2px dashed var(--accent)' : 'none', outlineOffset: -3, borderRadius: isDrop ? 4 : 0,
+                padding: 4, borderLeft: '1px solid var(--border2)', minHeight: 48, position: 'relative',
+                background: isDrop ? (dropSide === 'left' ? 'color-mix(in srgb, #10b981 15%, var(--bg))' : 'color-mix(in srgb, var(--accent) 15%, var(--bg))') : 'transparent',
+                outline: isDrop ? `2px dashed ${dropSide === 'left' ? '#10b981' : 'var(--accent)'}` : 'none', outlineOffset: -3, borderRadius: isDrop ? 4 : 0,
                 display: 'flex', flexDirection: 'column', gap: 3,
               }}>
+              {isDrop && <div style={{ position: 'absolute', top: 2, right: 4, fontSize: 10, fontWeight: 700, color: dropSide === 'left' ? '#10b981' : 'var(--accent)', pointerEvents: 'none' }}>{dropSide === 'left' ? '⊕ Copier' : '→ Déplacer'}</div>}
               {unassigned.map(shift => (
                 <UnassignedChip key={shift.id} shift={shift} onDelete={() => onDeleteShift(shift.id)} onDragStart={e => onAssignedDragStart(e, shift)} />
               ))}
@@ -612,7 +623,8 @@ function WeekGrid({ dates, today, employees, shifts, shiftDefs, dropTarget, getS
               const ds     = fmtDate(d)
               const dayShifts = getShifts(emp.id, ds)
               const key    = `${emp.id}_${ds}`
-              const isDrop = dropTarget === key
+              const isDrop = dropTarget?.key === key
+              const dropSide = dropTarget?.side
               const sun    = isSunday(ds)
               const hol    = isHoliday(ds)
               return (
@@ -622,10 +634,11 @@ function WeekGrid({ dates, today, employees, shifts, shiftDefs, dropTarget, getS
                   onDrop={e => onCellDrop(e, emp.id, ds)}
                   style={{
                     padding: 4, borderLeft: '1px solid var(--border2)', position: 'relative', minHeight: 68,
-                    background: isDrop ? 'color-mix(in srgb, var(--accent) 12%, var(--bg))' : sun ? 'color-mix(in srgb, #f59e0b 4%, var(--bg))' : hol ? 'color-mix(in srgb, #ec4899 5%, var(--bg))' : ds === today ? 'color-mix(in srgb, var(--accent) 3%, var(--bg))' : 'transparent',
-                    outline: isDrop ? '2px dashed var(--accent)' : 'none', outlineOffset: -3, borderRadius: isDrop ? 4 : 0,
+                    background: isDrop ? (dropSide === 'left' ? 'color-mix(in srgb, #10b981 12%, var(--bg))' : 'color-mix(in srgb, var(--accent) 12%, var(--bg))') : sun ? 'color-mix(in srgb, #f59e0b 4%, var(--bg))' : hol ? 'color-mix(in srgb, #ec4899 5%, var(--bg))' : ds === today ? 'color-mix(in srgb, var(--accent) 3%, var(--bg))' : 'transparent',
+                    outline: isDrop ? `2px dashed ${dropSide === 'left' ? '#10b981' : 'var(--accent)'}` : 'none', outlineOffset: -3, borderRadius: isDrop ? 4 : 0,
                     display: 'flex', flexDirection: 'column', gap: 3,
                   }}>
+                  {isDrop && <div style={{ position: 'absolute', top: 2, right: 4, fontSize: 10, fontWeight: 700, color: dropSide === 'left' ? '#10b981' : 'var(--accent)', pointerEvents: 'none', zIndex: 1 }}>{dropSide === 'left' ? '⊕ Copier' : '→ Déplacer'}</div>}
                   {dayShifts.map(shift => (
                     <AssignedChip key={shift.id} shift={shift} onDelete={() => onDeleteShift(shift.id)} onDragStart={e => onAssignedDragStart(e, shift)} />
                   ))}
