@@ -138,10 +138,18 @@ export default function Planning({ site, employees, shiftDefs, shifts, templates
     setDragSource(null)
   }
 
-  // ── Modal ajout shift ──────────────────────────────────────────
-  function openModal(empId, date) {
-    setModal({ empId, date })
-    setModalLabel(''); setModalStart('08:00'); setModalEnd('16:00')
+  // ── Modal ajout/édition shift ──────────────────────────────────
+  function openModal(empId, date, existingShift = null) {
+    if (existingShift) {
+      const def = shiftDefs.find(d => d.id === existingShift.shift_def_id)
+      setModal({ empId: existingShift.employee_id, date: existingShift.work_date, editId: existingShift.id })
+      setModalLabel(def?.label || '')
+      setModalStart(existingShift.start_time?.slice(0,5) || '08:00')
+      setModalEnd(existingShift.end_time?.slice(0,5) || '16:00')
+    } else {
+      setModal({ empId, date })
+      setModalLabel(''); setModalStart('08:00'); setModalEnd('16:00')
+    }
   }
   function pickShiftDef(def) {
     setModalLabel(def.label)
@@ -167,7 +175,14 @@ export default function Planning({ site, employees, shiftDefs, shifts, templates
   async function confirmModal() {
     if (!modal || !modalLabel.trim()) return
     const matchedDef = shiftDefs.find(d => d.label === modalLabel.trim())
-    await onDropShift({ employeeId: modal.empId, workDate: modal.date, shiftDefId: matchedDef?.id || null, startTime: modalStart, endTime: modalEnd })
+    await onDropShift({
+      employeeId: modal.empId,
+      workDate: modal.date,
+      shiftDefId: matchedDef?.id || null,
+      startTime: modalStart,
+      endTime: modalEnd,
+      existingId: modal.editId || null,
+    })
     setModal(null)
   }
 
@@ -525,6 +540,65 @@ export default function Planning({ site, employees, shiftDefs, shifts, templates
         )}
       </div>
 
+      {/* Modal ajout shift */}
+      {modal && (
+        <div onClick={e => e.target === e.currentTarget && setModal(null)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.65)', backdropFilter: 'blur(4px)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 14, padding: 28, minWidth: 360, maxWidth: 460, width: '90%', boxShadow: '0 24px 64px rgba(0,0,0,.5)' }}>
+            <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 18, marginBottom: 20 }}>{modal?.editId ? 'Modifier le shift' : 'Ajouter un shift'}</div>
+
+            {/* Quick-pick shift defs */}
+            {shiftDefs.length > 0 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 16 }}>
+                {shiftDefs.map(def => (
+                  <button key={def.id} onClick={() => pickShiftDef(def)}
+                    style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 7, border: `1px solid ${def.color}55`, background: modalLabel === def.label ? def.color + '33' : def.color + '11', cursor: 'pointer', fontSize: 12, fontWeight: 600, color: def.color }}>
+                    <span style={{ width: 7, height: 7, borderRadius: '50%', background: def.color, flexShrink: 0 }} />
+                    {def.label}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <label style={{ fontSize: 11, color: 'var(--fg2)', fontWeight: 600, display: 'block', marginBottom: 5 }}>Libellé</label>
+            <input autoFocus value={modalLabel} onChange={e => setModalLabel(e.target.value)}
+              placeholder="Ex: Matin, Soir, Coupure…"
+              onKeyDown={e => e.key === 'Enter' && confirmModal()}
+              style={{ width: '100%', background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--fg)', padding: '9px 12px', borderRadius: 8, fontSize: 13, outline: 'none', marginBottom: 16, boxSizing: 'border-box' }} />
+
+            <div style={{ display: 'flex', gap: 16, marginBottom: 20, alignItems: 'center' }}>
+              <div>
+                <label style={{ fontSize: 11, color: 'var(--fg2)', fontWeight: 600, display: 'block', marginBottom: 6 }}>Début</label>
+                <TimeInput value={modalStart} onChange={handleModalStartChange} />
+              </div>
+              <div style={{ marginTop: 18, fontSize: 14, color: 'var(--fg3)' }}>→</div>
+              <div>
+                <label style={{ fontSize: 11, color: 'var(--fg2)', fontWeight: 600, display: 'block', marginBottom: 6 }}>Fin</label>
+                <TimeInput value={modalEnd} onChange={setModalEnd} />
+              </div>
+            </div>
+
+            {modalViolations.length > 0 && (
+              <div style={{ background: 'color-mix(in srgb,#f85149 12%,var(--bg))', border: '1px solid #f8514944', borderRadius: 8, padding: '8px 12px', marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 3 }}>
+                {modalViolations.map((v, i) => (
+                  <div key={i} style={{ fontSize: 11, color: '#f85149', display: 'flex', alignItems: 'center', gap: 5 }}>
+                    <span>⚠</span>{v.message}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button onClick={() => setModal(null)} style={{ background: 'none', border: '1px solid var(--border)', color: 'var(--fg2)', padding: '8px 16px', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>Annuler</button>
+              <button onClick={confirmModal} disabled={!modalLabel.trim()}
+                style={{ background: modalLabel.trim() ? 'var(--accent)' : 'var(--bg3)', border: 'none', color: modalLabel.trim() ? '#fff' : 'var(--fg3)', padding: '8px 20px', borderRadius: 8, cursor: modalLabel.trim() ? 'pointer' : 'not-allowed', fontSize: 13, fontWeight: 700 }}>
+                {modal?.editId ? 'Enregistrer' : 'Ajouter'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Modal sauver semaine comme plan de travail */}
       {saveModal && (
         <div onClick={e => e.target === e.currentTarget && setSaveModal(false)}
@@ -601,7 +675,7 @@ function WeekGrid({ dates, today, employees, shifts, shiftDefs, dropTarget, getS
               }}>
               {isDrop && <div style={{ position: 'absolute', top: 2, right: 4, fontSize: 10, fontWeight: 700, color: dropSide === 'left' ? '#10b981' : 'var(--accent)', pointerEvents: 'none' }}>{dropSide === 'left' ? '⊕ Copier' : '→ Déplacer'}</div>}
               {unassigned.map(shift => (
-                <UnassignedChip key={shift.id} shift={shift} onDelete={() => onDeleteShift(shift.id)} onDragStart={e => onAssignedDragStart(e, shift)} />
+                <UnassignedChip key={shift.id} shift={shift} onDelete={() => onDeleteShift(shift.id)} onDragStart={e => onAssignedDragStart(e, shift)} onEdit={() => openModal(null, null, shift)} />
               ))}
             </div>
           )
@@ -640,7 +714,7 @@ function WeekGrid({ dates, today, employees, shifts, shiftDefs, dropTarget, getS
                   }}>
                   {isDrop && <div style={{ position: 'absolute', top: 2, right: 4, fontSize: 10, fontWeight: 700, color: dropSide === 'left' ? '#10b981' : 'var(--accent)', pointerEvents: 'none', zIndex: 1 }}>{dropSide === 'left' ? '⊕ Copier' : '→ Déplacer'}</div>}
                   {dayShifts.map(shift => (
-                    <AssignedChip key={shift.id} shift={shift} onDelete={() => onDeleteShift(shift.id)} onDragStart={e => onAssignedDragStart(e, shift)} />
+                    <AssignedChip key={shift.id} shift={shift} onDelete={() => onDeleteShift(shift.id)} onDragStart={e => onAssignedDragStart(e, shift)} onEdit={() => openModal(null, null, shift)} />
                   ))}
                   <div onClick={() => openModal(emp.id, ds)}
                     style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--fg3)', fontSize: 16, borderRadius: 6, border: '1px dashed var(--border2)', cursor: 'pointer', opacity: dayShifts.length > 0 ? 0.25 : 0.4, transition: 'opacity .15s', minHeight: dayShifts.length > 0 ? 22 : 52 }}
@@ -714,12 +788,12 @@ function TimeInput({ value, onChange }) {
   )
 }
 
-function UnassignedChip({ shift, onDelete, onDragStart }) {
+function UnassignedChip({ shift, onDelete, onDragStart, onEdit }) {
   const def   = shift.shift_defs || {}
   const color = def.color || '#818cf8'
   return (
-    <div draggable onDragStart={onDragStart}
-      style={{ background: color + '1a', border: `1px solid ${color}44`, borderLeft: `3px solid ${color}`, borderRadius: 7, padding: '4px 7px 4px 8px', cursor: 'grab', position: 'relative', userSelect: 'none', flexShrink: 0 }}>
+    <div draggable onDragStart={onDragStart} onClick={e => { e.stopPropagation(); onEdit && onEdit() }}
+      style={{ background: color + '1a', border: `1px solid ${color}44`, borderLeft: `3px solid ${color}`, borderRadius: 7, padding: '4px 7px 4px 8px', cursor: 'pointer', position: 'relative', userSelect: 'none', flexShrink: 0 }}>
       <div style={{ fontSize: 11, fontWeight: 700, color }}>{def.label || shift.start_time?.slice(0,5) || 'Shift'}</div>
       {shift.start_time && <div style={{ fontSize: 10, opacity: .75, marginTop: 1 }}>{shift.start_time.slice(0,5)}–{shift.end_time.slice(0,5)}</div>}
       <button onClick={e => { e.stopPropagation(); onDelete() }}
@@ -730,12 +804,12 @@ function UnassignedChip({ shift, onDelete, onDragStart }) {
   )
 }
 
-function AssignedChip({ shift, onDelete, onDragStart }) {
+function AssignedChip({ shift, onDelete, onDragStart, onEdit }) {
   const def   = shift.shift_defs || {}
   const color = def.color || '#818cf8'
   return (
-    <div draggable onDragStart={onDragStart}
-      style={{ background: color + '1a', border: `1px solid ${color}44`, borderLeft: `3px solid ${color}`, borderRadius: 7, padding: '5px 7px 5px 10px', cursor: 'grab', position: 'relative', userSelect: 'none', flexShrink: 0 }}>
+    <div draggable onDragStart={onDragStart} onClick={e => { e.stopPropagation(); onEdit && onEdit() }}
+      style={{ background: color + '1a', border: `1px solid ${color}44`, borderLeft: `3px solid ${color}`, borderRadius: 7, padding: '5px 7px 5px 10px', cursor: 'pointer', position: 'relative', userSelect: 'none', flexShrink: 0 }}>
       <div style={{ fontSize: 11, fontWeight: 700, color }}>{def.label || shift.start_time?.slice(0,5) || 'Shift'}</div>
       {shift.start_time && <div style={{ fontSize: 10, opacity: .75, marginTop: 1 }}>{shift.start_time.slice(0,5)}–{shift.end_time.slice(0,5)}</div>}
       <button onClick={e => { e.stopPropagation(); onDelete() }}
