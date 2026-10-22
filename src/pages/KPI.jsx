@@ -88,9 +88,11 @@ export default function KPI({ site, employees }) {
   function getDayPayroll(dateStr) {
     const dayShifts = kpiShifts.filter(s => s.work_date === dateStr && s.employee_id)
     return dayShifts.reduce((total, s) => {
-      const emp = employees.find(e => e.id === s.employee_id)
-      if (!emp?.hourly_rate) return total
-      return total + shiftDuration(s.start_time, s.end_time) * emp.hourly_rate
+      // Priorité aux données jointes dans le shift (select '*, employees(*)')
+      // Fallback sur le tableau employees des props
+      const empData = s.employees || employees.find(e => e.id === s.employee_id)
+      if (!empData?.hourly_rate) return total
+      return total + shiftDuration(s.start_time, s.end_time) * empData.hourly_rate
     }, 0)
   }
 
