@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase, getSites, getEmployees, getShiftDefs, getShiftsForWeek,
          upsertShift, deleteShift, getTemplates, saveTemplate,
          getClockingsForDate, clockIn, clockOut,
@@ -7,10 +7,12 @@ import Planning from './pages/Planning'
 import Pointage from './pages/Pointage'
 import Rapports from './pages/Rapports'
 import Config from './pages/Config'
+import KPI    from './pages/KPI'
 
 // NAV : items plats ou avec children pour groupe déroulant
 const NAV = [
   { id: 'planning',  label: 'Planning',           icon: '▦' },
+  { id: 'kpi',       label: 'KPI',                icon: '📈' },
   { id: 'temps',     label: 'Temps des employés', icon: '⏱', children: [
     { id: 'pointage', label: 'Pointage',           icon: '🕐' },
     { id: 'feuilles', label: "Feuilles d'heure",   icon: '📄' },
@@ -21,25 +23,30 @@ const NAV = [
   { id: 'config',    label: 'Config',              icon: '⚙' },
 ]
 
-// Aplatit le NAV pour trouver un item par id (y compris sous-items)
 function flatNav(nav) {
   return nav.flatMap(n => n.children ? [n, ...n.children] : [n])
 }
 
 export default function App() {
-  const [view, setView]             = useState('planning')
+  const [view, setView]             = useState(() => localStorage.getItem('pfy_view') || 'planning')
   const [sidebarOpen, setSidebar]   = useState(true)
   const [tempsOpen, setTempsOpen]   = useState(false)
   const [sites, setSites]           = useState([])
   const [siteId, setSiteId]         = useState(null)
   const [employees, setEmployees]   = useState([])
   const [shiftDefs, setShiftDefs]   = useState([])
+  const [positions, setPositions]   = useState([])
   const [shifts, setShifts]         = useState([])
   const [templates, setTemplates]   = useState([])
   const [clockings, setClockings]   = useState([])
-  const [weekOffset, setWeekOffset] = useState(0)
+  const [weekOffset, setWeekOffset] = useState(() => parseInt(localStorage.getItem('pfy_weekOffset') || '0', 10))
+  const [viewMode, setViewMode]       = useState(() => localStorage.getItem('pfy_viewMode') || 'week')
+  const [monthYear, setMonthYear]     = useState(() => { try { const s = localStorage.getItem('pfy_monthYear'); if (s) return JSON.parse(s) } catch {} const n = new Date(); return { year: n.getFullYear(), month: n.getMonth() } })
   const [loading, setLoading]       = useState(true)
   const [toast, setToast]           = useState(null)
+  const [periods, setPeriods]         = useState([])
+  const [activePeriod, setActivePeriod] = useState(() => { try { const s = localStorage.getItem('pfy_activePeriod'); if (s) return JSON.parse(s) } catch {} return null })
+  const [shiftsRefreshKey, setShiftsRefreshKey] = useState(0)
 
   function getMonday(offset = 0) {
     const d = new Date()
@@ -54,6 +61,28 @@ export default function App() {
       const d = new Date(mon); d.setDate(mon.getDate() + i); return d
     })
   }
+  // Returns array of 7-date arrays for all weeks touching the given month
+  function monthWeekDates(year, month) {
+    // First Monday on or before the 1st of month
+    const firstDay = new Date(year, month, 1)
+    const dow = firstDay.getDay() // 0=Sun
+    const offset = dow === 0 ? -6 : 1 - dow
+    const start = new Date(year, month, 1 + offset)
+    // Last Sunday on or after the last day of month
+    const lastDay = new Date(year, month + 1, 0)
+    const lastDow = lastDay.getDay()
+    const endOffset = lastDow === 0 ? 0 : 7 - lastDow
+    const end = new Date(year, month + 1, 0 + endOffset)
+    const weeks = []
+    const cur = new Date(start)
+    while (cur <= end) {
+      const week = Array.from({ length: 7 }, (_, i) => { const d = new Date(cur); d.setDate(cur.getDate() + i); return d })
+      weeks.push(week)
+      cur.setDate(cur.getDate() + 7)
+    }
+    return weeks
+  }
+
   function fmtDate(d) {
     return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
   }
@@ -77,30 +106,78 @@ export default function App() {
     })
   }, [])
 
+  // Main data load — runs on siteId change or manual refresh
+  // Includes shifts so everything loads atomically
   useEffect(() => {
     if (!siteId) return
     setLoading(true)
-    const dates = weekDates(weekOffset)
-    const from  = fmtDate(dates[0])
-    const to    = fmtDate(dates[6])
     const today = fmtDate(new Date())
+
+    // Read activePeriod from localStorage (state may already have it, but read fresh to be sure)
+    let restoredPeriod = null
+    try { const s = localStorage.getItem('pfy_activePeriod'); if (s) restoredPeriod = JSON.parse(s) } catch {}
+
+    // Compute shift range based on restored period or current week/month
+    let shFrom, shTo
+    if (restoredPeriod) {
+      shFrom = restoredPeriod.date_from; shTo = restoredPeriod.date_to
+    } else if (viewMode === 'month') {
+      const weeks = monthWeekDates(monthYear.year, monthYear.month)
+      shFrom = fmtDate(weeks[0][0]); shTo = fmtDate(weeks[weeks.length - 1][6])
+    } else {
+      const dates = weekDates(weekOffset)
+      shFrom = fmtDate(dates[0]); shTo = fmtDate(dates[6])
+    }
+
     Promise.all([
       getEmployees(siteId),
       getShiftDefs(siteId),
-      getShiftsForWeek(siteId, from, to),
+      supabase.from('positions').select('*').eq('site_id', siteId).order('created_at').then(r => r.data || []),
       getTemplates(siteId),
       getClockingsForDate(siteId, today),
-    ]).then(([emps, defs, sh, tpls, clk]) => {
-      setEmployees(emps); setShiftDefs(defs); setShifts(sh)
-      setTemplates(tpls); setClockings(clk); setLoading(false)
+      supabase.from('planning_periods').select('*').eq('site_id', siteId).order('date_from').then(r => r.data || []),
+      getShiftsForWeek(siteId, shFrom, shTo),
+    ]).then(([emps, defs, pos, tpls, clk, pers, sh]) => {
+      setEmployees(emps); setShiftDefs(defs); setPositions(pos)
+      setTemplates(tpls); setClockings(clk); setPeriods(pers)
+      // Validate period
+      const validPeriod = restoredPeriod ? (pers.find(p => p.id === restoredPeriod.id) || null) : null
+      setActivePeriod(validPeriod)
+      setShifts(sh)
+      setLoading(false)
     }).catch(err => { console.error(err); setLoading(false) })
-  }, [siteId, weekOffset])
+  }, [siteId, shiftsRefreshKey])
+
+  // Reload shifts when week/month nav changes (but not on initial load — handled above)
+  const initialLoadDone = useRef(false)
+  useEffect(() => {
+    if (!initialLoadDone.current) { initialLoadDone.current = true; return }
+    if (!siteId) return
+    let from, to
+    if (activePeriod) {
+      from = activePeriod.date_from; to = activePeriod.date_to
+    } else if (viewMode === 'month') {
+      const weeks = monthWeekDates(monthYear.year, monthYear.month)
+      from = fmtDate(weeks[0][0]); to = fmtDate(weeks[weeks.length - 1][6])
+    } else {
+      const dates = weekDates(weekOffset)
+      from = fmtDate(dates[0]); to = fmtDate(dates[6])
+    }
+    getShiftsForWeek(siteId, from, to).then(setShifts).catch(console.error)
+  }, [siteId, activePeriod, weekOffset, viewMode, monthYear])
 
   useEffect(() => {
     if (!siteId) return
     const sub1 = subscribeToShifts(siteId, () => {
-      const dates = weekDates(weekOffset)
-      getShiftsForWeek(siteId, fmtDate(dates[0]), fmtDate(dates[6])).then(setShifts).catch(console.error)
+      let from, to
+      if (viewMode === 'month') {
+        const weeks = monthWeekDates(monthYear.year, monthYear.month)
+        from = fmtDate(weeks[0][0]); to = fmtDate(weeks[weeks.length - 1][6])
+      } else {
+        const dates = weekDates(weekOffset)
+        from = fmtDate(dates[0]); to = fmtDate(dates[6])
+      }
+      getShiftsForWeek(siteId, from, to).then(setShifts).catch(console.error)
     })
     const sub2 = subscribeToClockings(siteId, () => {
       getClockingsForDate(siteId, fmtDate(new Date())).then(setClockings).catch(console.error)
@@ -117,7 +194,8 @@ export default function App() {
       }
       const saved = await upsertShift(payload)
       setShifts(prev => {
-        const filtered = prev.filter(s => !(s.employee_id === employeeId && s.work_date === workDate))
+        // Remove only the dragged shift (by id), not all shifts on that cell
+        const filtered = existingId ? prev.filter(s => s.id !== existingId) : prev
         return [...filtered, { ...saved, employees: employees.find(e => e.id === employeeId), shift_defs: shiftDefs.find(d => d.id === shiftDefId) }]
       })
       showToast('Shift ajouté ✓')
@@ -131,12 +209,29 @@ export default function App() {
 
   const handleRefreshShifts = useCallback(async () => {
     if (!siteId) return
-    const dates = weekDates(weekOffset)
-    const from  = fmtDate(dates[0])
-    const to    = fmtDate(dates[6])
-    const sh = await getShiftsForWeek(siteId, from, to)
-    setShifts(sh)
-  }, [siteId, weekOffset])
+    let from, to
+    if (activePeriod) {
+      from = activePeriod.date_from; to = activePeriod.date_to
+    } else if (viewMode === 'month') {
+      const weeks = monthWeekDates(monthYear.year, monthYear.month)
+      from = fmtDate(weeks[0][0]); to = fmtDate(weeks[weeks.length - 1][6])
+    } else {
+      const dates = weekDates(weekOffset)
+      from = fmtDate(dates[0]); to = fmtDate(dates[6])
+    }
+    const fresh = await getShiftsForWeek(siteId, from, to)
+    setShifts(fresh)
+  }, [siteId, activePeriod, viewMode, weekOffset, monthYear, monthWeekDates, weekDates, fmtDate])
+
+  // Persist navigation state to localStorage
+  useEffect(() => { localStorage.setItem('pfy_view', view) }, [view])
+  useEffect(() => { localStorage.setItem('pfy_weekOffset', String(weekOffset)) }, [weekOffset])
+  useEffect(() => { localStorage.setItem('pfy_viewMode', viewMode) }, [viewMode])
+  useEffect(() => { localStorage.setItem('pfy_monthYear', JSON.stringify(monthYear)) }, [monthYear])
+  useEffect(() => {
+    if (activePeriod) localStorage.setItem('pfy_activePeriod', JSON.stringify(activePeriod))
+    else localStorage.removeItem('pfy_activePeriod')
+  }, [activePeriod])
 
   const handleSaveTemplate = useCallback(async (name, slotsArray) => {
     try {
@@ -162,7 +257,6 @@ export default function App() {
     } catch (err) { showToast('Erreur : ' + err.message, 'error') }
   }, [showToast])
 
-  // Naviguer vers un sous-item ouvre aussi le groupe parent
   function navigateTo(id) {
     const inTemps = NAV.find(n => n.id === 'temps')?.children?.some(c => c.id === id)
     if (inTemps) setTempsOpen(true)
@@ -174,7 +268,6 @@ export default function App() {
   const site = sites.find(s => s.id === siteId)
   const W = sidebarOpen ? 220 : 64
 
-  // Style partagé pour bouton sidebar
   function navBtnStyle(active) {
     return {
       display: 'flex', alignItems: 'center', gap: 10,
@@ -196,7 +289,6 @@ export default function App() {
         background: 'var(--bg2)', borderRight: '1px solid var(--border)',
         display: 'flex', flexDirection: 'column', zIndex: 30, overflow: 'hidden',
       }}>
-        {/* Header logo + toggle */}
         <div style={{ height: 56, display: 'flex', alignItems: 'center', padding: '0 16px', borderBottom: '1px solid var(--border)', gap: 10, flexShrink: 0 }}>
           {sidebarOpen && (
             <div style={{ fontFamily: "'Syne', sans-serif", fontWeight: 800, fontSize: 17, color: 'var(--accent)', letterSpacing: '-0.5px', whiteSpace: 'nowrap', overflow: 'hidden' }}>
@@ -211,7 +303,6 @@ export default function App() {
           </button>
         </div>
 
-        {/* Sélecteur de site */}
         {sidebarOpen && (
           <div style={{ padding: '12px 12px 8px' }}>
             <select value={siteId || ''} onChange={e => setSiteId(e.target.value)} style={{
@@ -224,11 +315,9 @@ export default function App() {
           </div>
         )}
 
-        {/* Navigation */}
         <nav style={{ flex: 1, padding: '8px 8px', display: 'flex', flexDirection: 'column', gap: 2, overflowY: 'auto' }}>
           {NAV.map((item) => {
             if (!item.children) {
-              // Item simple
               const active = view === item.id
               return (
                 <button key={item.id} onClick={() => navigateTo(item.id)}
@@ -240,17 +329,14 @@ export default function App() {
               )
             }
 
-            // Groupe avec sous-items
             const groupActive = item.children.some(c => c.id === view)
             return (
               <div key={item.id}>
-                {/* En-tête du groupe (cliquable pour ouvrir/fermer) */}
                 <button
                   onClick={() => {
                     if (sidebarOpen) {
                       setTempsOpen(o => !o)
                     } else {
-                      // Sidebar fermée : naviguer vers le premier sous-item
                       navigateTo(item.children[0].id)
                     }
                   }}
@@ -267,7 +353,6 @@ export default function App() {
                   )}
                 </button>
 
-                {/* Sous-items (visibles si tempsOpen et sidebar ouverte) */}
                 {sidebarOpen && tempsOpen && (
                   <div style={{ paddingLeft: 16, display: 'flex', flexDirection: 'column', gap: 1 }}>
                     {item.children.map(child => {
@@ -287,7 +372,6 @@ export default function App() {
           })}
         </nav>
 
-        {/* Bouton thème */}
         <div style={{ padding: '8px 8px', borderTop: '1px solid var(--border)' }}>
           <button onClick={() => document.documentElement.dataset.theme = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light'}
             style={{
@@ -327,10 +411,29 @@ export default function App() {
                 <Planning site={site} employees={employees} shiftDefs={shiftDefs}
                   shifts={shifts} templates={templates}
                   weekOffset={weekOffset} setWeekOffset={setWeekOffset}
+                  viewMode={viewMode} setViewMode={setViewMode}
+                  monthYear={monthYear} setMonthYear={setMonthYear}
+                  monthWeekDates={monthWeekDates}
+                  periods={periods} activePeriod={activePeriod}
+                  setActivePeriod={setActivePeriod}
+                  onCreatePeriod={async (data) => {
+                    const { data: p } = await supabase.from('planning_periods').insert({ ...data, site_id: siteId }).select().single()
+                    if (p) { setPeriods(prev => [...prev, p].sort((a,b) => a.date_from.localeCompare(b.date_from))) }
+                    return p
+                  }}
+                  onDeletePeriod={async (id) => {
+                    if (!confirm('Supprimer cette période ?')) return
+                    await supabase.from('planning_periods').delete().eq('id', id)
+                    setPeriods(prev => prev.filter(p => p.id !== id))
+                    if (activePeriod?.id === id) setActivePeriod(null)
+                  }}
                   onDropShift={handleDropShift} onDeleteShift={handleDeleteShift}
                   onSaveTemplate={handleSaveTemplate}
                   onRefreshShifts={handleRefreshShifts}
-                  weekDates={weekDates} fmtDate={fmtDate} />
+                  weekDates={weekDates} fmtDate={fmtDate} appLoading={loading} />
+              )}
+              {view === 'kpi' && (
+                <KPI site={site} employees={employees} />
               )}
               {view === 'pointage' && (
                 <Pointage site={site} employees={employees} shifts={shifts}
@@ -344,10 +447,41 @@ export default function App() {
                   weekOffset={weekOffset} fmtDate={fmtDate} />
               )}
               {view === 'config' && (
-                <Config site={site} siteId={siteId} employees={employees} shiftDefs={shiftDefs}
+                <Config site={site} siteId={siteId} employees={employees} shiftDefs={shiftDefs} positions={positions}
+                  onCreateEmployee={async (data) => {
+                    const { data: e } = await supabase.from('employees').insert({ ...data, site_id: siteId }).select().single()
+                    if (e) setEmployees(prev => [...prev, e])
+                  }}
+                  onUpdateEmployee={async (id, data) => {
+                    const { data: e } = await supabase.from('employees').update(data).eq('id', id).select().single()
+                    if (e) setEmployees(prev => prev.map(x => x.id === id ? e : x))
+                  }}
+                  onDeleteEmployee={async (id) => {
+                    if (!confirm('Supprimer cet employé ?')) return
+                    await supabase.from('employees').delete().eq('id', id)
+                    setEmployees(prev => prev.filter(x => x.id !== id))
+                  }}
+                  onCreateShiftDef={async (data) => {
+                    const { data: d } = await supabase.from('shift_defs').insert({ ...data, site_id: siteId }).select().single()
+                    if (d) setShiftDefs(prev => [...prev, d])
+                  }}
+                  onDeleteShiftDef={async (id) => {
+                    if (!confirm('Supprimer ce type de shift ?')) return
+                    await supabase.from('shift_defs').delete().eq('id', id)
+                    setShiftDefs(prev => prev.filter(x => x.id !== id))
+                  }}
+                  onCreatePosition={async (data) => {
+                    const { data: p } = await supabase.from('positions').insert({ ...data, site_id: siteId }).select().single()
+                    if (p) setPositions(prev => [...prev, p])
+                  }}
+                  onDeletePosition={async (id) => {
+                    await supabase.from('positions').delete().eq('id', id)
+                    setPositions(prev => prev.filter(p => p.id !== id))
+                  }}
                   onRefresh={() => {
                     getEmployees(siteId).then(setEmployees)
                     getShiftDefs(siteId).then(setShiftDefs)
+                    supabase.from('positions').select('*').eq('site_id', siteId).order('created_at').then(r => setPositions(r.data || []))
                   }} />
               )}
               {(view === 'absences' || view === 'vacances' || view === 'feuilles') && (
