@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { checkShift, shiftDuration, isHoliday, isSunday } from '../lib/lgav'
+import EmployeeModal from '../components/EmployeeModal'
 
 const FR_DAYS   = ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim']
 const FR_MONTHS      = ['jan','fév','mar','avr','mai','jun','jul','aoû','sep','oct','nov','déc']
@@ -21,6 +22,7 @@ export default function Planning({ site, employees, shiftDefs, shifts, templates
   // Sauver semaine comme plan de travail
   const [saveModal, setSaveModal]     = useState(false)
   const [saveName, setSaveName]       = useState('')
+  const [empModal, setEmpModal]         = useState(null)  // employé à éditer
 
   // ── Nouveaux plans de travail (work_plans) ────────────────────
 
@@ -600,6 +602,14 @@ export default function Planning({ site, employees, shiftDefs, shifts, templates
       )}
 
       {/* Modal sauver semaine comme plan de travail */}
+      {empModal && (
+        <EmployeeModal
+          employee={empModal}
+          onClose={() => setEmpModal(null)}
+          onSaved={() => { /* les données s'actualisent au prochain refresh */ }}
+        />
+      )}
+
       {saveModal && (
         <div onClick={e => e.target === e.currentTarget && setSaveModal(false)}
           style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.65)', backdropFilter: 'blur(4px)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -688,8 +698,8 @@ function WeekGrid({ dates, today, employees, shifts, shiftDefs, dropTarget, getS
         const wh = getEmpWeekHours(emp.id)
         return (
           <div key={emp.id} style={{ display: 'grid', gridTemplateColumns: '160px repeat(7, 1fr) 56px', borderBottom: '1px solid var(--border2)' }}>
-            <div style={{ padding: '10px 8px 10px 16px', display: 'flex', flexDirection: 'column', justifyContent: 'center', borderRight: '1px solid var(--border2)' }}>
-              <div style={{ fontWeight: 600, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{emp.first_name} {emp.last_name}</div>
+            <div onClick={() => setEmpModal(emp)} style={{ padding: '10px 8px 10px 16px', display: 'flex', flexDirection: 'column', justifyContent: 'center', borderRight: '1px solid var(--border2)', cursor: 'pointer', transition: 'background .15s' }} onMouseEnter={e => e.currentTarget.style.background = 'color-mix(in srgb, var(--accent) 8%, var(--bg))'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+              <div style={{ fontWeight: 600, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: 'var(--accent)' }}>{emp.first_name} {emp.last_name}</div>
               <div style={{ fontSize: 11, color: 'var(--fg2)', marginTop: 1 }}>{emp.role}</div>
               <div style={{ fontSize: 10, color: 'var(--fg3)', marginTop: 2 }}>{emp.contract_pct}%</div>
             </div>
